@@ -8,7 +8,6 @@ from ai_product_enricher.models import (
     BatchEnrichmentRequest,
     BatchOptions,
     EnrichedProduct,
-    EnrichmentMetadata,
     EnrichmentOptions,
     EnrichmentRequest,
     ProductInput,
@@ -19,30 +18,28 @@ class TestProductInput:
     """Tests for ProductInput model."""
 
     def test_valid_product_input(self) -> None:
-        """Test creating a valid product input."""
+        """Test creating a valid product input with name from price list."""
         product = ProductInput(
-            name="iPhone 15 Pro",
-            category="smartphones",
-            brand="Apple",
+            name="Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
+            description="Флагманский смартфон с чипом A17 Pro",
         )
-        assert product.name == "iPhone 15 Pro"
-        assert product.category == "smartphones"
-        assert product.brand == "Apple"
+        assert "iPhone 15 Pro" in product.name
+        assert product.description is not None
 
     def test_minimal_product_input(self) -> None:
-        """Test creating a product with only required fields."""
-        product = ProductInput(name="Test Product")
-        assert product.name == "Test Product"
-        assert product.category is None
-        assert product.brand is None
+        """Test creating a product with only name (typical price list entry)."""
+        product = ProductInput(name="Картридж HP 123XL черный оригинальный")
+        assert product.name == "Картридж HP 123XL черный оригинальный"
+        assert product.description is None
 
-    def test_product_input_with_attributes(self) -> None:
-        """Test creating a product with attributes."""
+    def test_product_input_with_description(self) -> None:
+        """Test creating a product with description containing specs."""
         product = ProductInput(
-            name="Test Product",
-            attributes={"color": "black", "size": "large"},
+            name="Ноутбук ASUS ROG Strix G16 G614JI-N3132",
+            description="Intel Core i9, RTX 4070, 32GB RAM, 1TB SSD",
         )
-        assert product.attributes == {"color": "black", "size": "large"}
+        assert "ROG Strix" in product.name
+        assert "RTX 4070" in product.description
 
     def test_empty_name_raises_error(self) -> None:
         """Test that empty name raises validation error."""
@@ -50,40 +47,35 @@ class TestProductInput:
             ProductInput(name="")
 
     def test_get_search_query(self) -> None:
-        """Test search query generation."""
+        """Test search query generation uses full product name."""
         product = ProductInput(
-            name="iPhone 15 Pro",
-            brand="Apple",
-            category="smartphones",
+            name="Смартфон Samsung Galaxy S24 Ultra 512GB Titanium Gray",
         )
         query = product.get_search_query()
-        assert "Apple" in query
-        assert "iPhone 15 Pro" in query
-        assert "smartphones" in query
+        assert "Samsung Galaxy S24 Ultra" in query
 
     def test_to_prompt_context(self) -> None:
         """Test prompt context generation."""
         product = ProductInput(
-            name="iPhone 15 Pro",
-            brand="Apple",
-            category="smartphones",
-            description="Flagship phone",
+            name="Пылесос Dyson V15 Detect Absolute",
+            description="Беспроводной с лазерной подсветкой пыли",
         )
         context = product.to_prompt_context()
-        assert "iPhone 15 Pro" in context
-        assert "Apple" in context
-        assert "smartphones" in context
-        assert "Flagship phone" in context
+        assert "Dyson V15 Detect" in context
+        assert "лазерной подсветкой" in context
 
 
 class TestEnrichmentOptions:
     """Tests for EnrichmentOptions model."""
 
     def test_default_options(self) -> None:
-        """Test default enrichment options."""
+        """Test default enrichment options include new identification fields."""
         options = EnrichmentOptions()
         assert options.include_web_search is True
         assert options.language == "ru"
+        assert "manufacturer" in options.fields
+        assert "trademark" in options.fields
+        assert "category" in options.fields
         assert "description" in options.fields
         assert options.search_recency == "month"
 
@@ -92,12 +84,12 @@ class TestEnrichmentOptions:
         options = EnrichmentOptions(
             include_web_search=False,
             language="en",
-            fields=["description", "features"],
+            fields=["manufacturer", "trademark", "description"],
             max_features=5,
         )
         assert options.include_web_search is False
         assert options.language == "en"
-        assert len(options.fields) == 2
+        assert len(options.fields) == 3
         assert options.max_features == 5
 
 
@@ -107,16 +99,18 @@ class TestEnrichmentRequest:
     def test_valid_request(self) -> None:
         """Test creating a valid enrichment request."""
         request = EnrichmentRequest(
-            product=ProductInput(name="Test Product"),
+            product=ProductInput(name="Принтер HP LaserJet Pro M404dn"),
             enrichment_options=EnrichmentOptions(language="en"),
         )
-        assert request.product.name == "Test Product"
+        assert request.product.name == "Принтер HP LaserJet Pro M404dn"
         assert request.enrichment_options is not None
         assert request.enrichment_options.language == "en"
 
     def test_request_without_options(self) -> None:
         """Test request with default options."""
-        request = EnrichmentRequest(product=ProductInput(name="Test Product"))
+        request = EnrichmentRequest(
+            product=ProductInput(name="Кофемашина DeLonghi Magnifica S")
+        )
         assert request.enrichment_options is None
 
 
@@ -126,22 +120,45 @@ class TestEnrichedProduct:
     def test_enriched_product_defaults(self) -> None:
         """Test default values for enriched product."""
         enriched = EnrichedProduct()
+        # New identification fields
+        assert enriched.manufacturer is None
+        assert enriched.trademark is None
+        assert enriched.category is None
+        assert enriched.model_name is None
+        # Content fields
         assert enriched.description is None
         assert enriched.features == []
         assert enriched.specifications == {}
         assert enriched.seo_keywords == []
 
-    def test_enriched_product_with_data(self) -> None:
-        """Test enriched product with data."""
+    def test_enriched_product_with_identification(self) -> None:
+        """Test enriched product with manufacturer and trademark."""
         enriched = EnrichedProduct(
-            description="Great product",
-            features=["Feature 1", "Feature 2"],
-            specifications={"weight": "100g"},
-            seo_keywords=["keyword1", "keyword2"],
+            manufacturer="Foxconn Technology Group",
+            trademark="Apple",
+            category="Смартфоны",
+            model_name="iPhone 15 Pro Max 256GB",
+            description="Флагманский смартфон Apple",
+            features=["Чип A17 Pro", "Титановый корпус"],
+            specifications={"storage": "256GB", "color": "Black Titanium"},
         )
-        assert enriched.description == "Great product"
+        assert enriched.manufacturer == "Foxconn Technology Group"
+        assert enriched.trademark == "Apple"
+        assert enriched.category == "Смартфоны"
+        assert enriched.model_name == "iPhone 15 Pro Max 256GB"
+        assert enriched.description == "Флагманский смартфон Apple"
         assert len(enriched.features) == 2
-        assert enriched.specifications["weight"] == "100g"
+
+    def test_enriched_product_same_manufacturer_trademark(self) -> None:
+        """Test when manufacturer equals trademark (common case)."""
+        enriched = EnrichedProduct(
+            manufacturer="Samsung Electronics",
+            trademark="Samsung",
+            category="Телевизоры",
+            model_name="QN65S95D",
+        )
+        assert enriched.manufacturer == "Samsung Electronics"
+        assert enriched.trademark == "Samsung"
 
 
 class TestBatchOptions:
@@ -180,8 +197,8 @@ class TestBatchEnrichmentRequest:
         """Test creating a valid batch request."""
         request = BatchEnrichmentRequest(
             products=[
-                ProductInput(name="Product 1"),
-                ProductInput(name="Product 2"),
+                ProductInput(name="Товар 1 из прайс-листа"),
+                ProductInput(name="Товар 2 из прайс-листа"),
             ]
         )
         assert len(request.products) == 2

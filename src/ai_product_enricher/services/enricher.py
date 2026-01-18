@@ -73,8 +73,6 @@ class ProductEnricherService:
         if use_cache:
             cached = self._cache.get(
                 product_name=product.name,
-                product_brand=product.brand,
-                product_category=product.category,
                 language=options.language,
                 fields=options.fields,
                 web_search=options.include_web_search,

@@ -4,13 +4,33 @@ Production-ready сервис для обогащения продуктовых
 
 ## Возможности
 
-- Обогащение данных продуктов с использованием Zhipu AI GLM-4.7
-- Поддержка web search для получения актуальной информации
-- Пакетная обработка нескольких продуктов
-- Встроенное кэширование результатов
-- RESTful API с документацией OpenAPI
-- Структурированное логирование
-- Docker-ready
+- **Упрощённый ввод** - принимает только наименование и описание из прайс-листа/госзакупок
+- **Автоматическое определение производителя и торговой марки** из названия товара
+- **Обогащение данных** с использованием Zhipu AI GLM-4.7 с web search
+- **Пакетная обработка** нескольких продуктов
+- **Встроенное кэширование** результатов
+- **RESTful API** с документацией OpenAPI
+- **Структурированное логирование**
+- **Docker-ready**
+
+## Ключевая особенность: Извлечение производителя и торговой марки
+
+Сервис автоматически определяет:
+- **Производитель (manufacturer)** - компания, которая *физически производит* товар (например, Foxconn для iPhone)
+- **Торговая марка (trademark)** - бренд, под которым продаётся товар (например, Apple)
+
+Пример:
+```json
+{
+  "input": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
+  "output": {
+    "manufacturer": "Foxconn",
+    "trademark": "Apple",
+    "category": "Смартфоны",
+    "model_name": "iPhone 15 Pro Max 256GB"
+  }
+}
+```
 
 ## Быстрый старт
 
@@ -74,20 +94,70 @@ docker-compose up
 
 ### Обогащение одного продукта
 
+Упрощённый ввод - только наименование из прайс-листа:
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/products/enrich \
   -H "Content-Type: application/json" \
   -d '{
     "product": {
-      "name": "iPhone 15 Pro Max",
-      "category": "smartphones",
-      "brand": "Apple"
+      "name": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium"
+    },
+    "enrichment_options": {
+      "include_web_search": true,
+      "language": "ru",
+      "fields": ["manufacturer", "trademark", "category", "description", "features"]
+    }
+  }'
+```
+
+С описанием (опционально):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/products/enrich \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product": {
+      "name": "Картридж HP 123XL черный оригинальный F6V19AE",
+      "description": "Высокой емкости для принтеров HP DeskJet"
     },
     "enrichment_options": {
       "include_web_search": true,
       "language": "ru"
     }
   }'
+```
+
+### Ответ API
+
+```json
+{
+  "success": true,
+  "data": {
+    "product": {
+      "name": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
+      "description": null
+    },
+    "enriched": {
+      "manufacturer": "Foxconn",
+      "trademark": "Apple",
+      "category": "Смартфоны",
+      "model_name": "iPhone 15 Pro Max 256GB",
+      "description": "Флагманский смартфон Apple с титановым корпусом...",
+      "features": ["Чип A17 Pro", "Титановый корпус", "Камера 48MP"],
+      "specifications": {},
+      "seo_keywords": []
+    },
+    "sources": [],
+    "metadata": {
+      "model_used": "GLM-4.7",
+      "tokens_used": 1943,
+      "processing_time_ms": 19649,
+      "web_search_used": true,
+      "cached": false
+    }
+  }
+}
 ```
 
 ### Пакетная обработка
@@ -97,9 +167,13 @@ curl -X POST http://localhost:8000/api/v1/products/enrich/batch \
   -H "Content-Type: application/json" \
   -d '{
     "products": [
-      {"name": "iPhone 15 Pro", "brand": "Apple"},
-      {"name": "Galaxy S24 Ultra", "brand": "Samsung"}
+      {"name": "Смартфон Samsung Galaxy S24 Ultra 512GB"},
+      {"name": "Телевизор Samsung QE65S95DAUXRU 65 дюймов OLED 4K"}
     ],
+    "enrichment_options": {
+      "include_web_search": true,
+      "language": "ru"
+    },
     "batch_options": {
       "max_concurrent": 5
     }
@@ -111,6 +185,19 @@ curl -X POST http://localhost:8000/api/v1/products/enrich/batch \
 ```bash
 curl http://localhost:8000/api/v1/health
 ```
+
+## Поля обогащения
+
+| Поле | Описание |
+|------|----------|
+| `manufacturer` | Компания-производитель (физически производит товар) |
+| `trademark` | Торговая марка/бренд |
+| `category` | Категория товара |
+| `model_name` | Модель/артикул |
+| `description` | Расширенное описание |
+| `features` | Ключевые характеристики |
+| `specifications` | Технические характеристики |
+| `seo_keywords` | SEO ключевые слова |
 
 ## Документация API
 

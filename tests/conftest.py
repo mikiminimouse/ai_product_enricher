@@ -1,7 +1,7 @@
 """Pytest fixtures for AI Product Enricher tests."""
 
 import os
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -15,9 +15,13 @@ os.environ["APP_DEBUG"] = "true"
 
 @pytest.fixture
 def mock_openai_response() -> MagicMock:
-    """Create a mock OpenAI chat completion response."""
+    """Create a mock OpenAI chat completion response with manufacturer/trademark."""
     mock_message = MagicMock()
     mock_message.content = """{
+        "manufacturer": "Foxconn Technology Group",
+        "trademark": "Apple",
+        "category": "Смартфоны",
+        "model_name": "iPhone 15 Pro Max 256GB",
         "description": "Флагманский смартфон Apple с титановым корпусом и чипом A17 Pro.",
         "features": ["Титановый корпус", "Камера 48MP", "A17 Pro чип"],
         "specifications": {"display": "6.7\\" Super Retina XDR", "processor": "A17 Pro"},
@@ -51,44 +55,50 @@ def mock_zhipu_client(mock_openai_response: MagicMock) -> Generator[AsyncMock, N
 
 @pytest.fixture
 def sample_product_input() -> dict:
-    """Create sample product input data."""
+    """Create sample product input data - simplified to name + description only."""
     return {
-        "name": "iPhone 15 Pro Max",
-        "category": "smartphones",
-        "brand": "Apple",
-        "description": "Flagship smartphone",
-        "sku": "IPHN15PM-256-BLK",
+        "name": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
+        "description": "Флагманский смартфон с чипом A17 Pro и титановым корпусом",
     }
 
 
 @pytest.fixture
 def sample_enrichment_request(sample_product_input: dict) -> dict:
-    """Create sample enrichment request."""
+    """Create sample enrichment request with new identification fields."""
     return {
         "product": sample_product_input,
         "enrichment_options": {
             "include_web_search": True,
             "language": "ru",
-            "fields": ["description", "features", "specifications", "seo_keywords"],
+            "fields": [
+                "manufacturer",
+                "trademark",
+                "category",
+                "description",
+                "features",
+                "specifications",
+                "seo_keywords",
+            ],
         },
     }
 
 
 @pytest.fixture
-def sample_batch_request(sample_product_input: dict) -> dict:
-    """Create sample batch enrichment request."""
+def sample_batch_request() -> dict:
+    """Create sample batch enrichment request with simplified products."""
     return {
         "products": [
-            sample_product_input,
             {
-                "name": "Samsung Galaxy S24 Ultra",
-                "category": "smartphones",
-                "brand": "Samsung",
+                "name": "Смартфон Apple iPhone 15 Pro Max 256GB",
+                "description": "Флагман Apple с A17 Pro",
+            },
+            {
+                "name": "Смартфон Samsung Galaxy S24 Ultra 512GB",
             },
         ],
         "enrichment_options": {
             "include_web_search": False,
-            "language": "en",
+            "language": "ru",
         },
         "batch_options": {
             "max_concurrent": 2,

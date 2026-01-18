@@ -22,7 +22,16 @@ class EnrichmentOptions(BaseModel):
         description="Language for enriched content (ISO 639-1 code)",
     )
     fields: list[str] = Field(
-        default_factory=lambda: ["description", "features", "specifications", "seo_keywords"],
+        default_factory=lambda: [
+            "manufacturer",
+            "trademark",
+            "category",
+            "model_name",
+            "description",
+            "features",
+            "specifications",
+            "seo_keywords",
+        ],
         description="Fields to enrich",
     )
     search_recency: Literal["day", "week", "month", "year"] = Field(
@@ -57,16 +66,25 @@ class EnrichmentRequest(BaseModel):
             "examples": [
                 {
                     "product": {
-                        "name": "iPhone 15 Pro Max",
-                        "category": "smartphones",
-                        "brand": "Apple",
+                        "name": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
+                        "description": "Новейший флагман с чипом A17 Pro",
                     },
                     "enrichment_options": {
                         "include_web_search": True,
                         "language": "ru",
-                        "fields": ["description", "features", "specifications"],
+                        "fields": ["manufacturer", "trademark", "description", "features", "specifications"],
                     },
-                }
+                },
+                {
+                    "product": {
+                        "name": "Картридж HP 123XL черный оригинальный F6V19AE",
+                        "description": None,
+                    },
+                    "enrichment_options": {
+                        "include_web_search": False,
+                        "language": "ru",
+                    },
+                },
             ]
         }
     }
@@ -81,8 +99,31 @@ class Source(BaseModel):
 
 
 class EnrichedProduct(BaseModel):
-    """Enriched product data."""
+    """Enriched product data.
 
+    Includes extracted manufacturer and trademark which are determined
+    from product name, description, and optionally web search.
+    """
+
+    # Extracted identification fields (from name/description/web search)
+    manufacturer: str | None = Field(
+        default=None,
+        description="Extracted manufacturer - company that physically produces the product",
+    )
+    trademark: str | None = Field(
+        default=None,
+        description="Extracted trademark/brand - brand name under which product is sold",
+    )
+    category: str | None = Field(
+        default=None,
+        description="Determined product category",
+    )
+    model_name: str | None = Field(
+        default=None,
+        description="Extracted product model name/number",
+    )
+
+    # Enriched content fields
     description: str | None = Field(default=None, description="Enriched description")
     features: list[str] = Field(default_factory=list, description="Key product features")
     specifications: dict[str, Any] = Field(

@@ -14,9 +14,13 @@ os.environ["APP_DEBUG"] = "true"
 
 @pytest.fixture
 def mock_openai_response() -> MagicMock:
-    """Create a mock OpenAI chat completion response."""
+    """Create a mock OpenAI chat completion response with manufacturer/trademark."""
     mock_message = MagicMock()
     mock_message.content = """{
+        "manufacturer": "Foxconn Technology Group",
+        "trademark": "Apple",
+        "category": "Смартфоны",
+        "model_name": "iPhone 15 Pro Max 256GB",
         "description": "Флагманский смартфон Apple с титановым корпусом.",
         "features": ["Титановый корпус", "Камера 48MP", "A17 Pro чип"],
         "specifications": {"display": "6.7 Super Retina XDR", "processor": "A17 Pro"},
@@ -112,17 +116,23 @@ class TestProductEndpoints:
     """Tests for product enrichment endpoints."""
 
     def test_enrich_product_success(self, client: TestClient) -> None:
-        """Test successful product enrichment."""
+        """Test successful product enrichment with simplified input."""
+        # Simplified input - only name from price list
         request_data = {
             "product": {
-                "name": "iPhone 15 Pro Max",
-                "category": "smartphones",
-                "brand": "Apple",
+                "name": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
             },
             "enrichment_options": {
                 "include_web_search": True,
                 "language": "ru",
-                "fields": ["description", "features", "specifications", "seo_keywords"],
+                "fields": [
+                    "manufacturer",
+                    "trademark",
+                    "category",
+                    "description",
+                    "features",
+                    "specifications",
+                ],
             },
         }
 
@@ -132,14 +142,33 @@ class TestProductEndpoints:
         data = response.json()
         assert data["success"] is True
         assert data["data"] is not None
-        assert data["data"]["product"]["name"] == "iPhone 15 Pro Max"
+        # Verify identification fields are extracted
+        assert data["data"]["enriched"]["manufacturer"] == "Foxconn Technology Group"
+        assert data["data"]["enriched"]["trademark"] == "Apple"
+        assert data["data"]["enriched"]["category"] == "Смартфоны"
+        # Verify content fields
         assert data["data"]["enriched"]["description"] is not None
         assert len(data["data"]["enriched"]["features"]) > 0
         assert data["data"]["metadata"]["tokens_used"] > 0
 
     def test_enrich_product_minimal_request(self, client: TestClient) -> None:
-        """Test enrichment with minimal request."""
-        request_data = {"product": {"name": "Test Product"}}
+        """Test enrichment with minimal request - just product name."""
+        request_data = {"product": {"name": "Картридж HP 123XL черный оригинальный"}}
+
+        response = client.post("/api/v1/products/enrich", json=request_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    def test_enrich_product_with_description(self, client: TestClient) -> None:
+        """Test enrichment with name and description."""
+        request_data = {
+            "product": {
+                "name": "Ноутбук ASUS ROG Strix G16 G614JI-N3132",
+                "description": "Intel Core i9, RTX 4070, 32GB RAM, 1TB SSD",
+            }
+        }
 
         response = client.post("/api/v1/products/enrich", json=request_data)
 
@@ -148,9 +177,8 @@ class TestProductEndpoints:
         assert data["success"] is True
 
     def test_enrich_product_invalid_request(self, client: TestClient) -> None:
-        """Test enrichment with invalid request."""
-        # Missing product name
-        request_data = {"product": {"category": "test"}}
+        """Test enrichment with invalid request - missing product."""
+        request_data = {"enrichment_options": {"language": "ru"}}
 
         response = client.post("/api/v1/products/enrich", json=request_data)
 
@@ -165,13 +193,13 @@ class TestProductEndpoints:
         assert response.status_code == 422
 
     def test_enrich_batch_success(self, client: TestClient) -> None:
-        """Test successful batch enrichment."""
+        """Test successful batch enrichment with price list items."""
         request_data = {
             "products": [
-                {"name": "Product 1", "category": "cat1"},
-                {"name": "Product 2", "category": "cat2"},
+                {"name": "Смартфон Samsung Galaxy S24 Ultra 512GB"},
+                {"name": "Планшет Apple iPad Pro 12.9 M2 256GB"},
             ],
-            "enrichment_options": {"include_web_search": False, "language": "en"},
+            "enrichment_options": {"include_web_search": False, "language": "ru"},
             "batch_options": {"max_concurrent": 2, "fail_strategy": "continue"},
         }
 
@@ -217,7 +245,7 @@ class TestEnrichmentFlow:
     def test_enrichment_caching(self, client: TestClient) -> None:
         """Test that repeated requests use cache."""
         request_data = {
-            "product": {"name": "Cached Product", "brand": "Test Brand"},
+            "product": {"name": "Принтер HP LaserJet Pro M404dn"},
             "enrichment_options": {"language": "ru"},
         }
 
@@ -236,11 +264,11 @@ class TestEnrichmentFlow:
     def test_different_options_not_cached(self, client: TestClient) -> None:
         """Test that different options result in different cache entries."""
         request_ru = {
-            "product": {"name": "Language Test Product"},
+            "product": {"name": "Кофемашина DeLonghi Magnifica S ECAM 22.110"},
             "enrichment_options": {"language": "ru"},
         }
         request_en = {
-            "product": {"name": "Language Test Product"},
+            "product": {"name": "Кофемашина DeLonghi Magnifica S ECAM 22.110"},
             "enrichment_options": {"language": "en"},
         }
 
@@ -277,7 +305,7 @@ class TestErrorHandling:
     def test_invalid_enrichment_options(self, client: TestClient) -> None:
         """Test handling of invalid enrichment options."""
         request_data = {
-            "product": {"name": "Test Product"},
+            "product": {"name": "Тестовый товар"},
             "enrichment_options": {
                 "max_features": 100,  # Over limit
             },
@@ -290,7 +318,7 @@ class TestErrorHandling:
     def test_invalid_batch_options(self, client: TestClient) -> None:
         """Test handling of invalid batch options."""
         request_data = {
-            "products": [{"name": "Test Product"}],
+            "products": [{"name": "Тестовый товар"}],
             "batch_options": {
                 "max_concurrent": 100,  # Over limit
             },

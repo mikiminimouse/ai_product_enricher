@@ -1,7 +1,6 @@
 """Unit tests for enricher service."""
 
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -9,9 +8,7 @@ from ai_product_enricher.models import (
     BatchEnrichmentRequest,
     BatchOptions,
     EnrichedProduct,
-    EnrichmentMetadata,
     EnrichmentOptions,
-    EnrichmentResult,
     ProductInput,
     Source,
 )
@@ -24,17 +21,21 @@ class TestProductEnricherService:
 
     @pytest.fixture
     def mock_zhipu_client(self) -> AsyncMock:
-        """Create a mock Zhipu client."""
+        """Create a mock Zhipu client with manufacturer/trademark extraction."""
         mock = AsyncMock()
         mock.enrich_product = AsyncMock(
             return_value=(
                 EnrichedProduct(
-                    description="Test description",
-                    features=["Feature 1", "Feature 2"],
-                    specifications={"weight": "100g"},
-                    seo_keywords=["keyword1"],
+                    manufacturer="Foxconn Technology Group",
+                    trademark="Apple",
+                    category="Смартфоны",
+                    model_name="iPhone 15 Pro Max 256GB",
+                    description="Флагманский смартфон Apple",
+                    features=["Чип A17 Pro", "Титановый корпус"],
+                    specifications={"storage": "256GB"},
+                    seo_keywords=["iphone 15 pro max купить"],
                 ),
-                [Source(title="Test Source", url="https://example.com")],
+                [Source(title="Apple Official", url="https://apple.com")],
                 500,  # tokens
                 1000,  # processing time ms
             )
@@ -63,14 +64,24 @@ class TestProductEnricherService:
         enricher_service: ProductEnricherService,
         mock_zhipu_client: AsyncMock,
     ) -> None:
-        """Test successful product enrichment."""
-        product = ProductInput(name="Test Product", brand="Test Brand")
-        options = EnrichmentOptions(language="ru")
+        """Test successful product enrichment with manufacturer/trademark extraction."""
+        # Simplified input - only name and description
+        product = ProductInput(
+            name="Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
+            description="Флагманский смартфон с чипом A17 Pro",
+        )
+        options = EnrichmentOptions(
+            language="ru",
+            fields=["manufacturer", "trademark", "category", "description", "features"],
+        )
 
         result = await enricher_service.enrich_product(product, options)
 
-        assert result.product.name == "Test Product"
-        assert result.enriched.description == "Test description"
+        assert "iPhone 15 Pro" in result.product.name
+        assert result.enriched.manufacturer == "Foxconn Technology Group"
+        assert result.enriched.trademark == "Apple"
+        assert result.enriched.category == "Смартфоны"
+        assert result.enriched.description == "Флагманский смартфон Apple"
         assert len(result.enriched.features) == 2
         assert result.metadata.tokens_used == 500
         assert result.metadata.web_search_used is True
@@ -83,7 +94,7 @@ class TestProductEnricherService:
         mock_zhipu_client: AsyncMock,
     ) -> None:
         """Test that enrichment uses cache."""
-        product = ProductInput(name="Test Product", brand="Test Brand")
+        product = ProductInput(name="Смартфон Apple iPhone 15 Pro Max 256GB")
         options = EnrichmentOptions(language="ru")
 
         # First call - should call API
@@ -103,7 +114,7 @@ class TestProductEnricherService:
         mock_zhipu_client: AsyncMock,
     ) -> None:
         """Test enrichment without cache."""
-        product = ProductInput(name="Test Product")
+        product = ProductInput(name="Картридж HP 123XL черный оригинальный")
         options = EnrichmentOptions()
 
         # First call
@@ -120,13 +131,16 @@ class TestProductEnricherService:
         enricher_service: ProductEnricherService,
         mock_zhipu_client: AsyncMock,
     ) -> None:
-        """Test successful batch enrichment."""
+        """Test successful batch enrichment with simplified inputs."""
         request = BatchEnrichmentRequest(
             products=[
-                ProductInput(name="Product 1"),
-                ProductInput(name="Product 2"),
+                ProductInput(name="Смартфон Samsung Galaxy S24 Ultra 512GB"),
+                ProductInput(name="Планшет Apple iPad Pro 12.9 M2 256GB"),
             ],
-            enrichment_options=EnrichmentOptions(language="en"),
+            enrichment_options=EnrichmentOptions(
+                language="ru",
+                fields=["manufacturer", "trademark", "description"],
+            ),
             batch_options=BatchOptions(max_concurrent=2),
         )
 
@@ -147,7 +161,11 @@ class TestProductEnricherService:
         # Make second call fail
         mock_zhipu_client.enrich_product.side_effect = [
             (
-                EnrichedProduct(description="Success"),
+                EnrichedProduct(
+                    manufacturer="Samsung Electronics",
+                    trademark="Samsung",
+                    description="Флагманский смартфон Samsung",
+                ),
                 [],
                 100,
                 500,
@@ -157,8 +175,8 @@ class TestProductEnricherService:
 
         request = BatchEnrichmentRequest(
             products=[
-                ProductInput(name="Product 1"),
-                ProductInput(name="Product 2"),
+                ProductInput(name="Смартфон Samsung Galaxy S24 Ultra"),
+                ProductInput(name="Ноутбук ASUS ROG Strix G16"),
             ],
             batch_options=BatchOptions(fail_strategy="continue"),
         )
@@ -181,9 +199,9 @@ class TestProductEnricherService:
 
         request = BatchEnrichmentRequest(
             products=[
-                ProductInput(name="Product 1"),
-                ProductInput(name="Product 2"),
-                ProductInput(name="Product 3"),
+                ProductInput(name="Товар 1 из прайс-листа"),
+                ProductInput(name="Товар 2 из прайс-листа"),
+                ProductInput(name="Товар 3 из прайс-листа"),
             ],
             batch_options=BatchOptions(fail_strategy="stop"),
         )

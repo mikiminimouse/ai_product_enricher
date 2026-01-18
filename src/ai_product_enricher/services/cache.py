@@ -13,7 +13,14 @@ logger = get_logger(__name__)
 
 
 class CacheService:
-    """In-memory cache service for enrichment results."""
+    """In-memory cache service for enrichment results.
+
+    Cache key is based on:
+    - Product name (case-insensitive)
+    - Language
+    - Fields to enrich
+    - Web search flag
+    """
 
     def __init__(
         self,
@@ -43,8 +50,6 @@ class CacheService:
     def _generate_key(
         self,
         product_name: str,
-        product_brand: str | None,
-        product_category: str | None,
         language: str,
         fields: list[str],
         web_search: bool,
@@ -52,9 +57,7 @@ class CacheService:
         """Generate cache key from enrichment parameters.
 
         Args:
-            product_name: Product name
-            product_brand: Product brand
-            product_category: Product category
+            product_name: Product name from price list
             language: Enrichment language
             fields: Fields to enrich
             web_search: Whether web search is enabled
@@ -64,8 +67,6 @@ class CacheService:
         """
         key_data = {
             "name": product_name.lower().strip(),
-            "brand": (product_brand or "").lower().strip(),
-            "category": (product_category or "").lower().strip(),
             "language": language,
             "fields": sorted(fields),
             "web_search": web_search,
@@ -76,8 +77,6 @@ class CacheService:
     def get(
         self,
         product_name: str,
-        product_brand: str | None = None,
-        product_category: str | None = None,
         language: str = "ru",
         fields: list[str] | None = None,
         web_search: bool = True,
@@ -85,9 +84,7 @@ class CacheService:
         """Get cached enrichment result.
 
         Args:
-            product_name: Product name
-            product_brand: Product brand
-            product_category: Product category
+            product_name: Product name from price list
             language: Enrichment language
             fields: Fields that were enriched
             web_search: Whether web search was enabled
@@ -96,11 +93,18 @@ class CacheService:
             Cached EnrichmentResult or None if not found
         """
         if fields is None:
-            fields = ["description", "features", "specifications", "seo_keywords"]
+            fields = [
+                "manufacturer",
+                "trademark",
+                "category",
+                "model_name",
+                "description",
+                "features",
+                "specifications",
+                "seo_keywords",
+            ]
 
-        key = self._generate_key(
-            product_name, product_brand, product_category, language, fields, web_search
-        )
+        key = self._generate_key(product_name, language, fields, web_search)
 
         cached_data = self._cache.get(key)
         if cached_data is not None:
@@ -130,12 +134,19 @@ class CacheService:
             web_search: Whether web search was enabled
         """
         if fields is None:
-            fields = ["description", "features", "specifications", "seo_keywords"]
+            fields = [
+                "manufacturer",
+                "trademark",
+                "category",
+                "model_name",
+                "description",
+                "features",
+                "specifications",
+                "seo_keywords",
+            ]
 
         key = self._generate_key(
             result.product.name,
-            result.product.brand,
-            result.product.category,
             language,
             fields,
             web_search,
@@ -151,8 +162,6 @@ class CacheService:
     def invalidate(
         self,
         product_name: str,
-        product_brand: str | None = None,
-        product_category: str | None = None,
         language: str = "ru",
         fields: list[str] | None = None,
         web_search: bool = True,
@@ -161,8 +170,6 @@ class CacheService:
 
         Args:
             product_name: Product name
-            product_brand: Product brand
-            product_category: Product category
             language: Enrichment language
             fields: Fields that were enriched
             web_search: Whether web search was enabled
@@ -171,11 +178,18 @@ class CacheService:
             True if entry was found and removed, False otherwise
         """
         if fields is None:
-            fields = ["description", "features", "specifications", "seo_keywords"]
+            fields = [
+                "manufacturer",
+                "trademark",
+                "category",
+                "model_name",
+                "description",
+                "features",
+                "specifications",
+                "seo_keywords",
+            ]
 
-        key = self._generate_key(
-            product_name, product_brand, product_category, language, fields, web_search
-        )
+        key = self._generate_key(product_name, language, fields, web_search)
 
         if key in self._cache:
             del self._cache[key]

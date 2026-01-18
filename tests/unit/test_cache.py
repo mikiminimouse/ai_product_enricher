@@ -23,18 +23,21 @@ class TestCacheService:
 
     @pytest.fixture
     def sample_result(self) -> EnrichmentResult:
-        """Create a sample enrichment result."""
+        """Create a sample enrichment result with manufacturer/trademark."""
         return EnrichmentResult(
             product=ProductInput(
-                name="Test Product",
-                brand="Test Brand",
-                category="Test Category",
+                name="Смартфон Apple iPhone 15 Pro Max 256GB",
+                description="Флагманский смартфон с чипом A17 Pro",
             ),
             enriched=EnrichedProduct(
-                description="Test description",
-                features=["Feature 1", "Feature 2"],
-                specifications={"weight": "100g"},
-                seo_keywords=["keyword1"],
+                manufacturer="Foxconn Technology Group",
+                trademark="Apple",
+                category="Смартфоны",
+                model_name="iPhone 15 Pro Max 256GB",
+                description="Флагманский смартфон Apple с титановым корпусом",
+                features=["Чип A17 Pro", "Титановый корпус"],
+                specifications={"storage": "256GB"},
+                seo_keywords=["iphone 15 pro max купить"],
             ),
             sources=[],
             metadata=EnrichmentMetadata(
@@ -55,22 +58,22 @@ class TestCacheService:
         cache_service.set(
             result=sample_result,
             language="ru",
-            fields=["description", "features"],
+            fields=["manufacturer", "trademark", "description", "features"],
             web_search=True,
         )
 
-        # Get from cache
+        # Get from cache - using only product_name (simplified API)
         cached = cache_service.get(
-            product_name="Test Product",
-            product_brand="Test Brand",
-            product_category="Test Category",
+            product_name="Смартфон Apple iPhone 15 Pro Max 256GB",
             language="ru",
-            fields=["description", "features"],
+            fields=["manufacturer", "trademark", "description", "features"],
             web_search=True,
         )
 
         assert cached is not None
-        assert cached.product.name == "Test Product"
+        assert "iPhone 15 Pro" in cached.product.name
+        assert cached.enriched.manufacturer == "Foxconn Technology Group"
+        assert cached.enriched.trademark == "Apple"
         assert cached.metadata.cached is True
 
     def test_cache_miss(self, cache_service: CacheService) -> None:
@@ -89,18 +92,25 @@ class TestCacheService:
         cache_service.set(
             result=sample_result,
             language="ru",
-            fields=["description"],
+            fields=["manufacturer", "trademark", "description"],
             web_search=True,
         )
 
         # Try to get with different language - should miss
         cached = cache_service.get(
-            product_name="Test Product",
-            product_brand="Test Brand",
-            product_category="Test Category",
+            product_name="Смартфон Apple iPhone 15 Pro Max 256GB",
             language="en",  # Different language
-            fields=["description"],
+            fields=["manufacturer", "trademark", "description"],
             web_search=True,
+        )
+        assert cached is None
+
+        # Try with different web_search flag - should miss
+        cached = cache_service.get(
+            product_name="Смартфон Apple iPhone 15 Pro Max 256GB",
+            language="ru",
+            fields=["manufacturer", "trademark", "description"],
+            web_search=False,  # Different flag
         )
         assert cached is None
 
@@ -108,43 +118,39 @@ class TestCacheService:
         self, cache_service: CacheService, sample_result: EnrichmentResult
     ) -> None:
         """Test cache invalidation."""
+        fields = ["manufacturer", "trademark", "description"]
+
         # Set cache
         cache_service.set(
             result=sample_result,
             language="ru",
-            fields=["description"],
+            fields=fields,
             web_search=True,
         )
 
         # Verify it's in cache
         cached = cache_service.get(
-            product_name="Test Product",
-            product_brand="Test Brand",
-            product_category="Test Category",
+            product_name="Смартфон Apple iPhone 15 Pro Max 256GB",
             language="ru",
-            fields=["description"],
+            fields=fields,
             web_search=True,
         )
         assert cached is not None
 
         # Invalidate
         result = cache_service.invalidate(
-            product_name="Test Product",
-            product_brand="Test Brand",
-            product_category="Test Category",
+            product_name="Смартфон Apple iPhone 15 Pro Max 256GB",
             language="ru",
-            fields=["description"],
+            fields=fields,
             web_search=True,
         )
         assert result is True
 
         # Verify it's gone
         cached = cache_service.get(
-            product_name="Test Product",
-            product_brand="Test Brand",
-            product_category="Test Category",
+            product_name="Смартфон Apple iPhone 15 Pro Max 256GB",
             language="ru",
-            fields=["description"],
+            fields=fields,
             web_search=True,
         )
         assert cached is None
@@ -155,8 +161,22 @@ class TestCacheService:
         """Test clearing all cache."""
         # Set multiple entries
         cache_service.set(result=sample_result, language="ru")
-        sample_result.product = ProductInput(name="Product 2")
-        cache_service.set(result=sample_result, language="en")
+
+        # Create another result with different product name
+        sample_result2 = EnrichmentResult(
+            product=ProductInput(name="Ноутбук ASUS ROG Strix G16"),
+            enriched=EnrichedProduct(manufacturer="ASUS", trademark="ASUS"),
+            sources=[],
+            metadata=EnrichmentMetadata(
+                model_used="test-model",
+                tokens_used=100,
+                processing_time_ms=500,
+                web_search_used=True,
+                cached=False,
+                timestamp=datetime.utcnow(),
+            ),
+        )
+        cache_service.set(result=sample_result2, language="en")
 
         # Clear all
         count = cache_service.clear()
@@ -181,9 +201,7 @@ class TestCacheService:
 
         # Hit
         cache_service.get(
-            product_name="Test Product",
-            product_brand="Test Brand",
-            product_category="Test Category",
+            product_name="Смартфон Apple iPhone 15 Pro Max 256GB",
             language="ru",
         )
 
@@ -201,14 +219,13 @@ class TestCacheService:
         self, cache_service: CacheService, sample_result: EnrichmentResult
     ) -> None:
         """Test that cache is case-insensitive for product name."""
-        # Set with lowercase
+        # Set with original case
         cache_service.set(result=sample_result, language="ru")
 
-        # Get with different case - should hit
+        # Get with different case - should hit (name is case-insensitive)
         cached = cache_service.get(
-            product_name="TEST PRODUCT",
-            product_brand="TEST BRAND",
-            product_category="TEST CATEGORY",
+            product_name="СМАРТФОН APPLE IPHONE 15 PRO MAX 256GB",
             language="ru",
         )
         assert cached is not None
+        assert cached.enriched.trademark == "Apple"

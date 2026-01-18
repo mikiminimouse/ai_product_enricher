@@ -71,13 +71,31 @@ class ZhipuAIClient:
             "fr": "French",
         }.get(options.language, options.language)
 
-        return f"""You are a professional product content specialist. Your task is to enrich product information based on available data and web search results.
+        return f"""You are a professional product data analyst and content specialist. Your task is to analyze product information from price lists or procurement documents and enrich it with structured data.
+
+CRITICAL TASK - EXTRACT AND IDENTIFY:
+The user provides only a product NAME (from price list/procurement) and optionally a free-form DESCRIPTION.
+You MUST extract/determine the following from this limited information:
+
+1. **MANUFACTURER** (производитель) - The company that PHYSICALLY MANUFACTURES the product.
+   - This is NOT always the same as the brand/trademark
+   - Examples: Foxconn manufactures iPhones, Pegatron manufactures MacBooks
+   - For many products, manufacturer = trademark (e.g., Samsung manufactures Samsung TVs)
+   - Use web search if needed to find the actual manufacturer
+
+2. **TRADEMARK** (торговая марка) - The BRAND NAME under which the product is sold.
+   - This is the commercial brand visible to consumers
+   - Examples: Apple, Samsung, HP, Bosch, Xiaomi
+
+3. **CATEGORY** - Product category (e.g., smartphones, laptops, printers, etc.)
+
+4. **MODEL_NAME** - The specific model identifier/number
 
 IMPORTANT GUIDELINES:
 1. Generate content in {language_name} language
-2. Be factual and accurate - only include verified information
-3. Use professional, marketing-friendly language
-4. Structure information clearly and logically
+2. Be factual and accurate - use web search to verify manufacturer if unsure
+3. If manufacturer cannot be determined with certainty, set it to the same as trademark
+4. Extract as much structured data as possible from the product name
 5. Focus on the requested fields: {", ".join(options.fields)}
 
 OUTPUT FORMAT:
@@ -85,6 +103,10 @@ You must respond with a valid JSON object containing ONLY the requested fields.
 Do not include markdown code blocks or any other formatting.
 
 Available fields and their expected formats:
+- "manufacturer": Company that physically produces the product (string)
+- "trademark": Brand/trademark name (string)
+- "category": Product category (string)
+- "model_name": Product model identifier (string)
 - "description": A comprehensive product description (string, 2-4 sentences)
 - "features": Key product features (array of strings, max {options.max_features} items)
 - "specifications": Technical specifications (object with key-value pairs)
@@ -93,8 +115,9 @@ Available fields and their expected formats:
 - "pros": Product advantages (array of strings)
 - "cons": Product disadvantages (array of strings)
 
+Example input: "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium"
 Example response:
-{{"description": "Product description here", "features": ["Feature 1", "Feature 2"], "specifications": {{"weight": "150g", "dimensions": "10x5x2cm"}}}}"""
+{{"manufacturer": "Foxconn", "trademark": "Apple", "category": "Смартфоны", "model_name": "iPhone 15 Pro Max 256GB", "description": "Флагманский смартфон Apple...", "features": ["Чип A17 Pro", "Титановый корпус"], "specifications": {{"storage": "256GB", "color": "Black Titanium"}}}}"""
 
     def _build_user_prompt(self, product: ProductInput, options: EnrichmentOptions) -> str:
         """Build user prompt for product enrichment.
@@ -106,9 +129,16 @@ Example response:
         Returns:
             User prompt string
         """
-        prompt = f"""Please enrich the following product information:
+        prompt = f"""Analyze and enrich the following product from a price list/procurement document:
 
 {product.to_prompt_context()}
+
+REQUIRED TASKS:
+1. Extract/determine the MANUFACTURER (who physically makes this product)
+2. Extract/determine the TRADEMARK (brand name)
+3. Determine the product CATEGORY
+4. Extract the MODEL NAME/NUMBER
+5. Generate other requested fields
 
 Generate the following fields: {", ".join(options.fields)}
 
@@ -179,6 +209,12 @@ Respond with a valid JSON object only. No markdown, no explanations."""
 
         # Build EnrichedProduct from parsed data
         enriched = EnrichedProduct(
+            # Extracted identification fields
+            manufacturer=data.get("manufacturer") if "manufacturer" in options.fields else None,
+            trademark=data.get("trademark") if "trademark" in options.fields else None,
+            category=data.get("category") if "category" in options.fields else None,
+            model_name=data.get("model_name") if "model_name" in options.fields else None,
+            # Content fields
             description=data.get("description") if "description" in options.fields else None,
             features=data.get("features", []) if "features" in options.fields else [],
             specifications=(
@@ -208,11 +244,39 @@ Respond with a valid JSON object only. No markdown, no explanations."""
 
         data: dict[str, Any] = {}
 
+        # Helper function to extract string field
+        def extract_string_field(field_name: str) -> str | None:
+            match = re.search(rf'"{field_name}"\s*:\s*"([^"]*(?:\\.[^"]*)*)"', content)
+            if match:
+                return match.group(1).replace('\\"', '"')
+            return None
+
+        # Extract identification fields
+        if "manufacturer" in options.fields:
+            val = extract_string_field("manufacturer")
+            if val:
+                data["manufacturer"] = val
+
+        if "trademark" in options.fields:
+            val = extract_string_field("trademark")
+            if val:
+                data["trademark"] = val
+
+        if "category" in options.fields:
+            val = extract_string_field("category")
+            if val:
+                data["category"] = val
+
+        if "model_name" in options.fields:
+            val = extract_string_field("model_name")
+            if val:
+                data["model_name"] = val
+
         # Extract description
         if "description" in options.fields:
-            desc_match = re.search(r'"description"\s*:\s*"([^"]*(?:\\.[^"]*)*)"', content)
-            if desc_match:
-                data["description"] = desc_match.group(1).replace('\\"', '"')
+            val = extract_string_field("description")
+            if val:
+                data["description"] = val
 
         # Extract features array
         if "features" in options.fields:
