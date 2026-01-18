@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-product-enricher
+    ports:
+      - "8000:8000"
+    environment:
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
+      - ZHIPUAI_BASE_URL=${ZHIPUAI_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
+      - ZHIPUAI_MODEL=${ZHIPUAI_MODEL:-GLM-4.7}
+      - APP_ENV=${APP_ENV:-production}
+      - APP_DEBUG=${APP_DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-3600}
+      - CACHE_MAX_SIZE=${CACHE_MAX_SIZE:-1000}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Development service with hot reload
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-product-enricher-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
+      - APP_ENV=development
+      - APP_DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./src:/app/src:ro
+    command: uvicorn ai_product_enricher.main:app --host 0.0.0.0 --port 8000 --reload
+    profiles:
+      - dev
