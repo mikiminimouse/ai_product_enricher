@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 # Set test environment variables before importing app modules
 os.environ["ZHIPUAI_API_KEY"] = "test-api-key"
+os.environ["CLOUDRU_API_KEY"] = "test-cloudru-api-key"
 os.environ["APP_ENV"] = "development"
 os.environ["APP_DEBUG"] = "true"
 
@@ -42,6 +43,34 @@ def mock_openai_response() -> MagicMock:
 
 
 @pytest.fixture
+def mock_cloudru_openai_response() -> MagicMock:
+    """Create a mock OpenAI chat completion response for Cloud.ru (Russian product)."""
+    mock_message = MagicMock()
+    mock_message.content = """{
+        "manufacturer": "Яндекс",
+        "trademark": "Яндекс",
+        "category": "Умные колонки",
+        "model_name": "Станция Макс",
+        "description": "Флагманская умная колонка с голосовым помощником Алиса.",
+        "features": ["Голосовой помощник Алиса", "Качественный звук", "Умный дом"],
+        "specifications": {"тип": "умная колонка", "голосовой помощник": "Алиса"},
+        "seo_keywords": ["яндекс станция макс купить", "умная колонка алиса"]
+    }"""
+
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
+
+    mock_usage = MagicMock()
+    mock_usage.total_tokens = 400
+
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_response.usage = mock_usage
+
+    return mock_response
+
+
+@pytest.fixture
 def mock_zhipu_client(mock_openai_response: MagicMock) -> Generator[AsyncMock, None, None]:
     """Create a mock Zhipu AI client."""
     with patch(
@@ -54,11 +83,34 @@ def mock_zhipu_client(mock_openai_response: MagicMock) -> Generator[AsyncMock, N
 
 
 @pytest.fixture
+def mock_cloudru_client(mock_cloudru_openai_response: MagicMock) -> Generator[AsyncMock, None, None]:
+    """Create a mock Cloud.ru client."""
+    with patch(
+        "ai_product_enricher.services.cloudru_client.AsyncOpenAI"
+    ) as mock_class:
+        mock_instance = AsyncMock()
+        mock_instance.chat.completions.create = AsyncMock(return_value=mock_cloudru_openai_response)
+        mock_class.return_value = mock_instance
+        yield mock_instance
+
+
+@pytest.fixture
 def sample_product_input() -> dict:
     """Create sample product input data - simplified to name + description only."""
     return {
         "name": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
         "description": "Флагманский смартфон с чипом A17 Pro и титановым корпусом",
+        "country_origin": "CN",
+    }
+
+
+@pytest.fixture
+def sample_russian_product_input() -> dict:
+    """Create sample Russian product input data."""
+    return {
+        "name": "Яндекс Станция Макс",
+        "description": "Умная колонка с Алисой",
+        "country_origin": "RU",
     }
 
 
@@ -108,8 +160,8 @@ def sample_batch_request() -> dict:
 
 
 @pytest.fixture
-def test_client(mock_zhipu_client: AsyncMock) -> Generator[TestClient, None, None]:
-    """Create a test client for the FastAPI app."""
+def test_client(mock_zhipu_client: AsyncMock, mock_cloudru_client: AsyncMock) -> Generator[TestClient, None, None]:
+    """Create a test client for the FastAPI app with both LLM clients mocked."""
     from ai_product_enricher.main import app
 
     with TestClient(app) as client:

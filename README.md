@@ -1,48 +1,72 @@
 # AI Product Enricher
 
-Production-ready сервис для обогащения продуктовых данных с использованием Zhipu AI (GLM-4.7) API с поддержкой web_search для получения актуальной информации о продуктах.
+Production-ready сервис для обогащения продуктовых данных с мульти-LLM архитектурой.
+
+## Архитектура
+
+```
+                    ┌─────────────────────────────────────┐
+                    │         AI Product Enricher         │
+                    │           FastAPI Server            │
+                    └─────────────────┬───────────────────┘
+                                      │
+                         ┌────────────┴────────────┐
+                         │   LLM Router Service    │
+                         │   (по country_origin)   │
+                         └────────────┬────────────┘
+                                      │
+            ┌─────────────────────────┼─────────────────────────┐
+            │                         │                         │
+            ▼                         │                         ▼
+┌───────────────────────┐             │             ┌───────────────────────┐
+│      Cloud.ru         │             │             │       Z.ai            │
+│  GigaChat3-10B-A1.8B  │◄────────────┴────────────►│      GLM-4.7          │
+│                       │                           │                       │
+│  country_origin: RU   │                           │  country_origin: *    │
+│  (российские товары)  │                           │  (зарубежные товары)  │
+└───────────────────────┘                           └───────────────────────┘
+```
+
+**Маршрутизация LLM:**
+| country_origin | LLM Provider | Модель |
+|----------------|--------------|--------|
+| `RU` / `RUS` | Cloud.ru | GigaChat3-10B-A1.8B |
+| Любой другой / null | Z.ai | GLM-4.7 |
+
+## Внешний API (для команды)
+
+**Base URL:** `http://128.199.126.60:8000`
+
+| Endpoint | Описание |
+|----------|----------|
+| `/docs` | Swagger UI |
+| `/redoc` | ReDoc документация |
+| `/api/v1/health` | Health check |
+| `/api/v1/products/enrich` | Обогащение одного товара |
+| `/api/v1/products/enrich/batch` | Пакетная обработка |
 
 ## Возможности
 
-- **Упрощённый ввод** - принимает только наименование и описание из прайс-листа/госзакупок
-- **Автоматическое определение производителя и торговой марки** из названия товара
-- **Обогащение данных** с использованием Zhipu AI GLM-4.7 с web search
+- **Мульти-LLM маршрутизация** — автоматический выбор провайдера по стране
+- **Автоопределение manufacturer/trademark** из названия товара
+- **Web Search** — актуальная информация о товарах (Z.ai)
 - **Пакетная обработка** нескольких продуктов
 - **Встроенное кэширование** результатов
-- **RESTful API** с документацией OpenAPI
+- **RESTful API** с OpenAPI документацией
 - **Структурированное логирование**
 - **Docker-ready**
-
-## Ключевая особенность: Извлечение производителя и торговой марки
-
-Сервис автоматически определяет:
-- **Производитель (manufacturer)** - компания, которая *физически производит* товар (например, Foxconn для iPhone)
-- **Торговая марка (trademark)** - бренд, под которым продаётся товар (например, Apple)
-
-Пример:
-```json
-{
-  "input": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
-  "output": {
-    "manufacturer": "Foxconn",
-    "trademark": "Apple",
-    "category": "Смартфоны",
-    "model_name": "iPhone 15 Pro Max 256GB"
-  }
-}
-```
 
 ## Быстрый старт
 
 ### Требования
 
 - Python 3.11+
-- Zhipu AI API ключ
+- API ключ Zhipu AI (обязательно)
+- API ключ Cloud.ru (опционально, для российских товаров)
 
 ### Установка
 
 ```bash
-# Клонирование
 cd /root/ai_product_enricher
 
 # Создание виртуального окружения
@@ -55,107 +79,90 @@ pip install -e ".[dev]"
 
 ### Конфигурация
 
-Создайте файл `.env` на основе `.env.example`:
+Создайте файл `.env`:
 
 ```bash
-cp .env.example .env
-```
+# Zhipu AI (обязательно)
+ZHIPUAI_API_KEY=your_zhipu_api_key
 
-Отредактируйте `.env` и укажите ваш API ключ:
+# Cloud.ru (опционально, для RU товаров)
+CLOUDRU_API_KEY=your_cloudru_api_key
 
-```bash
-ZHIPUAI_API_KEY=your_api_key_here
+# Приложение
+APP_ENV=production
+LOG_LEVEL=INFO
 ```
 
 ### Запуск
 
 ```bash
-# Development mode
+# Development
 uvicorn src.ai_product_enricher.main:app --reload
 
-# Production mode
+# Production
 uvicorn src.ai_product_enricher.main:app --host 0.0.0.0 --port 8000
 ```
 
-### Docker
+## API Примеры
+
+### Health Check
 
 ```bash
-# Build
-docker build -t ai-product-enricher .
-
-# Run
-docker run -p 8000:8000 -e ZHIPUAI_API_KEY=your_key ai-product-enricher
-
-# Или с docker-compose
-docker-compose up
+curl http://128.199.126.60:8000/api/v1/health
 ```
 
-## API
-
-### Обогащение одного продукта
-
-Упрощённый ввод - только наименование из прайс-листа:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/products/enrich \
-  -H "Content-Type: application/json" \
-  -d '{
-    "product": {
-      "name": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium"
-    },
-    "enrichment_options": {
-      "include_web_search": true,
-      "language": "ru",
-      "fields": ["manufacturer", "trademark", "category", "description", "features"]
-    }
-  }'
-```
-
-С описанием (опционально):
-
-```bash
-curl -X POST http://localhost:8000/api/v1/products/enrich \
-  -H "Content-Type: application/json" \
-  -d '{
-    "product": {
-      "name": "Картридж HP 123XL черный оригинальный F6V19AE",
-      "description": "Высокой емкости для принтеров HP DeskJet"
-    },
-    "enrichment_options": {
-      "include_web_search": true,
-      "language": "ru"
-    }
-  }'
-```
-
-### Ответ API
-
+Ответ:
 ```json
 {
-  "success": true,
-  "data": {
+  "status": "healthy",
+  "zhipu_api": "connected",
+  "cloudru_api": "connected"
+}
+```
+
+### Российский товар → Cloud.ru
+
+```bash
+curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
+  -H "Content-Type: application/json" \
+  -d '{
     "product": {
-      "name": "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium",
-      "description": null
-    },
-    "enriched": {
-      "manufacturer": "Foxconn",
-      "trademark": "Apple",
-      "category": "Смартфоны",
-      "model_name": "iPhone 15 Pro Max 256GB",
-      "description": "Флагманский смартфон Apple с титановым корпусом...",
-      "features": ["Чип A17 Pro", "Титановый корпус", "Камера 48MP"],
-      "specifications": {},
-      "seo_keywords": []
-    },
-    "sources": [],
-    "metadata": {
-      "model_used": "GLM-4.7",
-      "tokens_used": 1943,
-      "processing_time_ms": 19649,
-      "web_search_used": true,
-      "cached": false
+      "name": "Яндекс Станция Макс",
+      "country_origin": "RU"
     }
+  }'
+```
+
+Ответ (metadata):
+```json
+{
+  "metadata": {
+    "model_used": "ai-sage/GigaChat3-10B-A1.8B",
+    "llm_provider": "cloudru"
+  }
+}
+```
+
+### Зарубежный товар → Z.ai
+
+```bash
+curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product": {
+      "name": "iPhone 15 Pro",
+      "country_origin": "CN"
+    }
+  }'
+```
+
+Ответ (metadata):
+```json
+{
+  "metadata": {
+    "model_used": "GLM-4.7",
+    "llm_provider": "zhipuai",
+    "web_search_used": true
   }
 }
 ```
@@ -163,27 +170,35 @@ curl -X POST http://localhost:8000/api/v1/products/enrich \
 ### Пакетная обработка
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/products/enrich/batch \
+curl -X POST http://128.199.126.60:8000/api/v1/products/enrich/batch \
   -H "Content-Type: application/json" \
   -d '{
     "products": [
-      {"name": "Смартфон Samsung Galaxy S24 Ultra 512GB"},
-      {"name": "Телевизор Samsung QE65S95DAUXRU 65 дюймов OLED 4K"}
-    ],
-    "enrichment_options": {
-      "include_web_search": true,
-      "language": "ru"
-    },
-    "batch_options": {
-      "max_concurrent": 5
-    }
+      {"name": "1С:Предприятие", "country_origin": "RU"},
+      {"name": "Microsoft Office", "country_origin": "US"}
+    ]
   }'
 ```
 
-### Health Check
+В batch-ответе каждый товар маршрутизируется к соответствующему LLM.
+
+### Полный запрос с опциями
 
 ```bash
-curl http://localhost:8000/api/v1/health
+curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product": {
+      "name": "Samsung Galaxy S24 Ultra 512GB",
+      "description": "Флагманский смартфон",
+      "country_origin": "KR"
+    },
+    "enrichment_options": {
+      "include_web_search": true,
+      "language": "ru",
+      "fields": ["manufacturer", "trademark", "category", "description", "features", "specifications"]
+    }
+  }'
 ```
 
 ## Поля обогащения
@@ -199,11 +214,51 @@ curl http://localhost:8000/api/v1/health
 | `specifications` | Технические характеристики |
 | `seo_keywords` | SEO ключевые слова |
 
-## Документация API
+## Конфигурация
 
-При запуске в development режиме доступна интерактивная документация:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+### Zhipu AI (обязательно)
+
+| Переменная | Описание | По умолчанию |
+|------------|----------|--------------|
+| `ZHIPUAI_API_KEY` | API ключ | (обязательно) |
+| `ZHIPUAI_BASE_URL` | Base URL | https://api.z.ai/api/coding/paas/v4 |
+| `ZHIPUAI_MODEL` | Модель | GLM-4.7 |
+
+### Cloud.ru (опционально)
+
+| Переменная | Описание | По умолчанию |
+|------------|----------|--------------|
+| `CLOUDRU_API_KEY` | API ключ | - |
+| `CLOUDRU_BASE_URL` | Base URL | https://foundation-models.api.cloud.ru/v1 |
+| `CLOUDRU_MODEL` | Модель | ai-sage/GigaChat3-10B-A1.8B |
+| `CLOUDRU_TIMEOUT` | Таймаут (сек) | 60 |
+
+### Приложение
+
+| Переменная | Описание | По умолчанию |
+|------------|----------|--------------|
+| `APP_ENV` | Окружение | production |
+| `APP_DEBUG` | Debug режим | false |
+| `APP_PORT` | Порт | 8000 |
+| `LOG_LEVEL` | Уровень логирования | INFO |
+| `CACHE_TTL_SECONDS` | TTL кэша | 3600 |
+| `CACHE_MAX_SIZE` | Размер кэша | 1000 |
+
+## Docker
+
+```bash
+# Build
+docker build -t ai-product-enricher .
+
+# Run
+docker run -p 8000:8000 \
+  -e ZHIPUAI_API_KEY=your_key \
+  -e CLOUDRU_API_KEY=your_key \
+  ai-product-enricher
+
+# Docker Compose
+docker-compose up
+```
 
 ## Тестирование
 
@@ -228,32 +283,22 @@ ai_product_enricher/
 ├── src/ai_product_enricher/
 │   ├── api/              # API endpoints
 │   │   └── v1/           # API версия 1
-│   ├── core/             # Core modules (config, logging, exceptions)
+│   ├── core/             # Config, logging, exceptions
 │   ├── models/           # Pydantic models
 │   ├── services/         # Business logic
+│   │   ├── enricher.py       # Маршрутизация LLM
+│   │   ├── zhipu_client.py   # Z.ai клиент
+│   │   ├── cloudru_client.py # Cloud.ru клиент
+│   │   └── cache.py          # Кэш сервис
 │   └── main.py           # FastAPI app
-├── tests/                # Tests
+├── tests/
 │   ├── unit/
 │   └── integration/
-├── docs/                 # Documentation
+├── docs/
 ├── Dockerfile
 ├── docker-compose.yml
 └── pyproject.toml
 ```
-
-## Конфигурация
-
-| Переменная | Описание | По умолчанию |
-|------------|----------|--------------|
-| `ZHIPUAI_API_KEY` | API ключ Zhipu AI | (обязательно) |
-| `ZHIPUAI_BASE_URL` | Base URL API | https://api.z.ai/api/coding/paas/v4 |
-| `ZHIPUAI_MODEL` | Модель для использования | GLM-4.7 |
-| `APP_ENV` | Окружение (development/production) | production |
-| `APP_DEBUG` | Debug режим | false |
-| `APP_PORT` | Порт приложения | 8000 |
-| `LOG_LEVEL` | Уровень логирования | INFO |
-| `CACHE_TTL_SECONDS` | TTL кэша в секундах | 3600 |
-| `CACHE_MAX_SIZE` | Максимальный размер кэша | 1000 |
 
 ## Лицензия
 

@@ -13,7 +13,9 @@ from ai_product_enricher.models import (
     Source,
 )
 from ai_product_enricher.services.cache import CacheService
+from ai_product_enricher.services.cloudru_client import CloudruClient
 from ai_product_enricher.services.enricher import ProductEnricherService
+from ai_product_enricher.services.zhipu_client import ZhipuAIClient
 
 
 class TestProductEnricherService:
@@ -23,6 +25,8 @@ class TestProductEnricherService:
     def mock_zhipu_client(self) -> AsyncMock:
         """Create a mock Zhipu client with manufacturer/trademark extraction."""
         mock = AsyncMock()
+        mock.provider_name = "zhipuai"
+        mock.model_name = "GLM-4.7"
         mock.enrich_product = AsyncMock(
             return_value=(
                 EnrichedProduct(
@@ -44,17 +48,45 @@ class TestProductEnricherService:
         return mock
 
     @pytest.fixture
+    def mock_cloudru_client(self) -> AsyncMock:
+        """Create a mock Cloud.ru client for Russian products."""
+        mock = AsyncMock()
+        mock.provider_name = "cloudru"
+        mock.model_name = "ai-sage/GigaChat3-10B-A1.8B"
+        mock.is_configured = True
+        mock.enrich_product = AsyncMock(
+            return_value=(
+                EnrichedProduct(
+                    manufacturer="Яндекс",
+                    trademark="Яндекс",
+                    category="Умные колонки",
+                    model_name="Станция Макс",
+                    description="Флагманская умная колонка Яндекс",
+                    features=["Голосовой помощник Алиса", "Качественный звук"],
+                    specifications={"тип": "умная колонка"},
+                    seo_keywords=["яндекс станция купить"],
+                ),
+                [],  # Cloud.ru doesn't return sources
+                400,  # tokens
+                800,  # processing time ms
+            )
+        )
+        mock.health_check = AsyncMock(return_value=True)
+        return mock
+
+    @pytest.fixture
     def cache_service(self) -> CacheService:
         """Create a cache service for testing."""
         return CacheService(ttl_seconds=60, max_size=100)
 
     @pytest.fixture
     def enricher_service(
-        self, mock_zhipu_client: AsyncMock, cache_service: CacheService
+        self, mock_zhipu_client: AsyncMock, mock_cloudru_client: AsyncMock, cache_service: CacheService
     ) -> ProductEnricherService:
-        """Create enricher service with mocks."""
+        """Create enricher service with both LLM clients mocked."""
         return ProductEnricherService(
             zhipu_client=mock_zhipu_client,
+            cloudru_client=mock_cloudru_client,
             cache_service=cache_service,
         )
 
@@ -236,3 +268,201 @@ class TestProductEnricherService:
         assert "hits" in stats
         assert "misses" in stats
         assert "hit_rate_percent" in stats
+
+
+class TestLLMRouting:
+    """Tests for LLM provider routing based on country_origin."""
+
+    @pytest.fixture
+    def mock_zhipu_client(self) -> AsyncMock:
+        """Create a mock Zhipu client."""
+        mock = AsyncMock()
+        mock.provider_name = "zhipuai"
+        mock.model_name = "GLM-4.7"
+        mock.enrich_product = AsyncMock(
+            return_value=(
+                EnrichedProduct(
+                    manufacturer="Foxconn",
+                    trademark="Apple",
+                    category="Смартфоны",
+                    description="iPhone",
+                ),
+                [Source(title="Apple", url="https://apple.com")],
+                500,
+                1000,
+            )
+        )
+        mock.health_check = AsyncMock(return_value=True)
+        return mock
+
+    @pytest.fixture
+    def mock_cloudru_client(self) -> AsyncMock:
+        """Create a mock Cloud.ru client."""
+        mock = AsyncMock()
+        mock.provider_name = "cloudru"
+        mock.model_name = "ai-sage/GigaChat3-10B-A1.8B"
+        mock.is_configured = True
+        mock.enrich_product = AsyncMock(
+            return_value=(
+                EnrichedProduct(
+                    manufacturer="Яндекс",
+                    trademark="Яндекс",
+                    category="Умные колонки",
+                    description="Яндекс Станция",
+                ),
+                [],
+                400,
+                800,
+            )
+        )
+        mock.health_check = AsyncMock(return_value=True)
+        return mock
+
+    @pytest.fixture
+    def enricher_service(
+        self, mock_zhipu_client: AsyncMock, mock_cloudru_client: AsyncMock
+    ) -> ProductEnricherService:
+        """Create enricher service with both clients."""
+        return ProductEnricherService(
+            zhipu_client=mock_zhipu_client,
+            cloudru_client=mock_cloudru_client,
+            cache_service=CacheService(),
+        )
+
+    @pytest.mark.asyncio
+    async def test_routes_russian_product_to_cloudru(
+        self,
+        enricher_service: ProductEnricherService,
+        mock_zhipu_client: AsyncMock,
+        mock_cloudru_client: AsyncMock,
+    ) -> None:
+        """Test that Russian products (RU) are routed to Cloud.ru."""
+        product = ProductInput(
+            name="Яндекс Станция Макс",
+            country_origin="RU",
+        )
+
+        result = await enricher_service.enrich_product(product, use_cache=False)
+
+        # Should use Cloud.ru
+        mock_cloudru_client.enrich_product.assert_called_once()
+        mock_zhipu_client.enrich_product.assert_not_called()
+        assert result.metadata.llm_provider == "cloudru"
+        assert result.enriched.manufacturer == "Яндекс"
+
+    @pytest.mark.asyncio
+    async def test_routes_russian_product_rus_code(
+        self,
+        enricher_service: ProductEnricherService,
+        mock_cloudru_client: AsyncMock,
+    ) -> None:
+        """Test that Russian products with RUS code are routed to Cloud.ru."""
+        product = ProductInput(
+            name="Касперский Антивирус",
+            country_origin="RUS",
+        )
+
+        result = await enricher_service.enrich_product(product, use_cache=False)
+
+        mock_cloudru_client.enrich_product.assert_called_once()
+        assert result.metadata.llm_provider == "cloudru"
+
+    @pytest.mark.asyncio
+    async def test_routes_foreign_product_to_zhipu(
+        self,
+        enricher_service: ProductEnricherService,
+        mock_zhipu_client: AsyncMock,
+        mock_cloudru_client: AsyncMock,
+    ) -> None:
+        """Test that foreign products are routed to Zhipu AI."""
+        product = ProductInput(
+            name="iPhone 15 Pro",
+            country_origin="CN",
+        )
+
+        result = await enricher_service.enrich_product(product, use_cache=False)
+
+        # Should use Zhipu
+        mock_zhipu_client.enrich_product.assert_called_once()
+        mock_cloudru_client.enrich_product.assert_not_called()
+        assert result.metadata.llm_provider == "zhipuai"
+
+    @pytest.mark.asyncio
+    async def test_routes_no_country_to_zhipu(
+        self,
+        enricher_service: ProductEnricherService,
+        mock_zhipu_client: AsyncMock,
+        mock_cloudru_client: AsyncMock,
+    ) -> None:
+        """Test that products without country_origin use Zhipu AI."""
+        product = ProductInput(
+            name="Generic Product",
+            country_origin=None,
+        )
+
+        result = await enricher_service.enrich_product(product, use_cache=False)
+
+        mock_zhipu_client.enrich_product.assert_called_once()
+        mock_cloudru_client.enrich_product.assert_not_called()
+        assert result.metadata.llm_provider == "zhipuai"
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_zhipu_when_cloudru_not_configured(
+        self,
+        mock_zhipu_client: AsyncMock,
+    ) -> None:
+        """Test that Russian products fall back to Zhipu when Cloud.ru is not configured."""
+        # Create unconfigured Cloud.ru client
+        mock_cloudru = AsyncMock()
+        mock_cloudru.is_configured = False
+
+        service = ProductEnricherService(
+            zhipu_client=mock_zhipu_client,
+            cloudru_client=mock_cloudru,
+        )
+
+        product = ProductInput(
+            name="Яндекс Станция",
+            country_origin="RU",
+        )
+
+        result = await service.enrich_product(product, use_cache=False)
+
+        # Should fall back to Zhipu
+        mock_zhipu_client.enrich_product.assert_called_once()
+        mock_cloudru.enrich_product.assert_not_called()
+        assert result.metadata.llm_provider == "zhipuai"
+
+    @pytest.mark.asyncio
+    async def test_health_check_both_providers(
+        self,
+        enricher_service: ProductEnricherService,
+        mock_zhipu_client: AsyncMock,
+        mock_cloudru_client: AsyncMock,
+    ) -> None:
+        """Test health check returns status of both providers."""
+        result = await enricher_service.health_check()
+
+        assert result["zhipu_api"] == "connected"
+        assert result["cloudru_api"] == "connected"
+        mock_zhipu_client.health_check.assert_called_once()
+        mock_cloudru_client.health_check.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_health_check_cloudru_not_configured(
+        self,
+        mock_zhipu_client: AsyncMock,
+    ) -> None:
+        """Test health check when Cloud.ru is not configured."""
+        mock_cloudru = AsyncMock()
+        mock_cloudru.is_configured = False
+
+        service = ProductEnricherService(
+            zhipu_client=mock_zhipu_client,
+            cloudru_client=mock_cloudru,
+        )
+
+        result = await service.health_check()
+
+        assert result["zhipu_api"] == "connected"
+        assert result["cloudru_api"] == "not_configured"

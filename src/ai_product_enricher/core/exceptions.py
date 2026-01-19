@@ -66,6 +66,29 @@ class ZhipuAPIError(AIProductEnricherError):
         self.api_error_code = api_error_code
 
 
+class CloudruAPIError(AIProductEnricherError):
+    """Raised when Cloud.ru (GigaChat) API returns an error."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+        api_error_code: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="CLOUDRU_API_ERROR",
+            details={
+                **(details or {}),
+                "status_code": status_code,
+                "api_error_code": api_error_code,
+            },
+        )
+        self.status_code = status_code
+        self.api_error_code = api_error_code
+
+
 class RateLimitError(AIProductEnricherError):
     """Raised when rate limit is exceeded."""
 

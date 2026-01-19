@@ -43,6 +43,26 @@ class Settings(BaseSettings):
         description="Maximum number of API retry attempts",
     )
 
+    # Cloud.ru (GigaChat) API Configuration
+    cloudru_api_key: str | None = Field(
+        default=None,
+        description="Cloud.ru API key (optional, for Russian products)",
+    )
+    cloudru_base_url: str = Field(
+        default="https://foundation-models.api.cloud.ru/v1",
+        description="Cloud.ru API base URL",
+    )
+    cloudru_model: str = Field(
+        default="ai-sage/GigaChat3-10B-A1.8B",
+        description="Cloud.ru model to use (GigaChat)",
+    )
+    cloudru_timeout: int = Field(
+        default=60,
+        ge=10,
+        le=300,
+        description="Cloud.ru API request timeout in seconds",
+    )
+
     # Application Settings
     app_env: Literal["development", "staging", "production"] = Field(
         default="production",

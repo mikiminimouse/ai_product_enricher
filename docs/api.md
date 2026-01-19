@@ -2,9 +2,21 @@
 
 ## Overview
 
-AI Product Enricher API предоставляет endpoints для обогащения продуктовых данных с использованием Zhipu AI.
+AI Product Enricher API предоставляет endpoints для обогащения продуктовых данных с мульти-LLM архитектурой:
 
-Base URL: `http://localhost:8000/api/v1`
+- **Z.ai (GLM-4.7)** — для зарубежных товаров (CN, US, KR и др.)
+- **Cloud.ru (GigaChat)** — для российских товаров (RU)
+
+Base URL: `http://128.199.126.60:8000/api/v1`
+
+## LLM Routing
+
+Маршрутизация на основе поля `country_origin`:
+
+| country_origin | Провайдер | Модель |
+|----------------|-----------|--------|
+| RU, RUS | Cloud.ru | ai-sage/GigaChat3-10B-A1.8B |
+| CN, US, KR, null и др. | Z.ai | GLM-4.7 |
 
 ## Authentication
 
@@ -16,7 +28,7 @@ Base URL: `http://localhost:8000/api/v1`
 
 #### GET /health
 
-Проверка состояния сервиса.
+Проверка состояния сервиса и подключения к LLM-провайдерам.
 
 **Response:**
 ```json
@@ -24,6 +36,7 @@ Base URL: `http://localhost:8000/api/v1`
   "status": "healthy",
   "version": "1.0.0",
   "zhipu_api": "connected",
+  "cloudru_api": "connected",
   "uptime_seconds": 3600,
   "cache": {
     "size": 10,
@@ -34,6 +47,11 @@ Base URL: `http://localhost:8000/api/v1`
   }
 }
 ```
+
+**Status values:**
+- `healthy` - оба провайдера доступны
+- `degraded` - один из провайдеров недоступен
+- `unhealthy` - критические проблемы
 
 #### GET /ping
 
@@ -68,20 +86,15 @@ Base URL: `http://localhost:8000/api/v1`
 ```json
 {
   "product": {
-    "name": "iPhone 15 Pro Max",
-    "category": "smartphones",
-    "brand": "Apple",
+    "name": "iPhone 15 Pro Max 256GB",
     "description": "optional existing description",
-    "sku": "IPHN15PM-256-BLK",
-    "attributes": {"color": "black"}
+    "country_origin": "CN"
   },
   "enrichment_options": {
     "include_web_search": true,
     "language": "ru",
-    "fields": ["description", "features", "specifications", "seo_keywords"],
-    "search_recency": "month",
-    "max_features": 10,
-    "max_keywords": 15
+    "fields": ["manufacturer", "trademark", "category", "description", "features"],
+    "max_features": 10
   }
 }
 ```
@@ -89,12 +102,9 @@ Base URL: `http://localhost:8000/api/v1`
 **Product Fields:**
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| name | string | Yes | Название продукта |
-| category | string | No | Категория |
-| brand | string | No | Бренд |
-| description | string | No | Существующее описание |
-| sku | string | No | Артикул |
-| attributes | object | No | Дополнительные атрибуты |
+| name | string | Yes | Название продукта (из прайс-листа/госзакупок) |
+| description | string | No | Дополнительное описание |
+| country_origin | string | No | Страна происхождения (ISO 3166-1: RU, CN, US, KR). **Влияет на выбор LLM** |
 
 **Enrichment Options:**
 | Field | Type | Default | Description |
@@ -107,6 +117,10 @@ Base URL: `http://localhost:8000/api/v1`
 | max_keywords | integer | 15 | Максимум SEO keywords |
 
 **Available Fields:**
+- `manufacturer` - Компания-производитель (физически производит товар)
+- `trademark` - Торговая марка/бренд
+- `category` - Категория товара
+- `model_name` - Модель/артикул
 - `description` - Описание продукта
 - `features` - Ключевые особенности
 - `specifications` - Технические характеристики
@@ -121,13 +135,16 @@ Base URL: `http://localhost:8000/api/v1`
   "success": true,
   "data": {
     "product": {
-      "name": "iPhone 15 Pro Max",
-      "category": "smartphones",
-      "brand": "Apple",
-      "sku": "IPHN15PM-256-BLK"
+      "name": "iPhone 15 Pro Max 256GB",
+      "description": null,
+      "country_origin": "CN"
     },
     "enriched": {
-      "description": "Флагманский смартфон Apple...",
+      "manufacturer": "Foxconn",
+      "trademark": "Apple",
+      "category": "Смартфоны",
+      "model_name": "iPhone 15 Pro Max 256GB",
+      "description": "Флагманский смартфон Apple с титановым корпусом...",
       "features": ["Титановый корпус", "Камера 48MP", "A17 Pro чип"],
       "specifications": {
         "display": "6.7\" Super Retina XDR",
@@ -135,16 +152,40 @@ Base URL: `http://localhost:8000/api/v1`
       },
       "seo_keywords": ["iphone 15 pro max купить"]
     },
-    "sources": [
-      {"title": "Apple Official", "url": "https://apple.com/...", "date": "2025-01-15"}
-    ],
+    "sources": [],
     "metadata": {
       "model_used": "GLM-4.7",
-      "tokens_used": 1523,
-      "processing_time_ms": 2340,
+      "llm_provider": "zhipuai",
+      "tokens_used": 2381,
+      "processing_time_ms": 47312,
       "web_search_used": true,
       "cached": false,
-      "timestamp": "2025-01-18T12:00:00Z"
+      "timestamp": "2026-01-19T12:00:00Z"
+    }
+  }
+}
+```
+
+**Response для российского товара (country_origin: "RU"):**
+```json
+{
+  "success": true,
+  "data": {
+    "product": {
+      "name": "Яндекс Станция Макс",
+      "country_origin": "RU"
+    },
+    "enriched": {
+      "manufacturer": "Яндекс",
+      "trademark": "Яндекс",
+      "category": "Умные колонки"
+    },
+    "metadata": {
+      "model_used": "ai-sage/GigaChat3-10B-A1.8B",
+      "llm_provider": "cloudru",
+      "tokens_used": 1986,
+      "processing_time_ms": 1050,
+      "web_search_used": false
     }
   }
 }
@@ -152,23 +193,23 @@ Base URL: `http://localhost:8000/api/v1`
 
 #### POST /products/enrich/batch
 
-Пакетная обработка нескольких продуктов.
+Пакетная обработка нескольких продуктов с автоматической маршрутизацией на разные LLM.
 
 **Request Body:**
 ```json
 {
   "products": [
-    {"name": "Product 1", "category": "cat1"},
-    {"name": "Product 2", "category": "cat2"}
+    {"name": "Kaspersky Internet Security", "country_origin": "RU"},
+    {"name": "Samsung Galaxy S24 Ultra", "country_origin": "KR"},
+    {"name": "Xiaomi Mi Smart Band 8", "country_origin": "CN"}
   ],
   "enrichment_options": {
-    "include_web_search": true,
-    "language": "en"
+    "language": "ru",
+    "fields": ["manufacturer", "trademark", "category"]
   },
   "batch_options": {
-    "max_concurrent": 5,
-    "fail_strategy": "continue",
-    "timeout_per_product": 60
+    "max_concurrent": 3,
+    "fail_strategy": "continue"
   }
 }
 ```

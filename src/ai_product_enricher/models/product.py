@@ -22,6 +22,12 @@ class ProductInput(BaseModel):
         max_length=10000,
         description="Free-form description that may contain specifications, attributes, brand info",
     )
+    country_origin: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=3,
+        description="Country of origin (ISO 3166-1 alpha-2/3), e.g. 'RU', 'CN', 'US'",
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -29,14 +35,17 @@ class ProductInput(BaseModel):
                 {
                     "name": "Смартфон Apple iPhone 15 Pro Max 256GB Black",
                     "description": "Флагманский смартфон с чипом A17 Pro, титановым корпусом",
+                    "country_origin": "CN",
                 },
                 {
                     "name": "Ноутбук ASUS ROG Strix G16 G614JI-N3132",
                     "description": None,
+                    "country_origin": None,
                 },
                 {
-                    "name": "Картридж HP 123XL черный оригинальный",
-                    "description": "Для принтеров HP DeskJet 2130, 2620, 2630. Ресурс 480 страниц.",
+                    "name": "Яндекс Станция Макс",
+                    "description": "Умная колонка с Алисой",
+                    "country_origin": "RU",
                 },
             ]
         }

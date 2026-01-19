@@ -28,6 +28,7 @@ async def health_check(enricher: EnricherServiceDep) -> dict[str, Any]:
         - Overall status
         - Application version
         - Zhipu API connectivity
+        - Cloud.ru API connectivity
         - Uptime in seconds
         - Cache statistics
     """
@@ -35,10 +36,24 @@ async def health_check(enricher: EnricherServiceDep) -> dict[str, Any]:
 
     uptime_seconds = int(time.time() - _start_time)
 
+    # Determine overall status
+    # healthy: primary provider (zhipu) is connected
+    # degraded: primary provider down or secondary provider down when configured
+    zhipu_ok = health_data["zhipu_api"] == "connected"
+    cloudru_ok = health_data["cloudru_api"] in ("connected", "not_configured")
+
+    if zhipu_ok and cloudru_ok:
+        status = "healthy"
+    elif zhipu_ok:
+        status = "degraded"  # Cloud.ru configured but not working
+    else:
+        status = "unhealthy"  # Primary provider down
+
     return {
-        "status": "healthy" if health_data["zhipu_api"] == "connected" else "degraded",
+        "status": status,
         "version": __version__,
         "zhipu_api": health_data["zhipu_api"],
+        "cloudru_api": health_data["cloudru_api"],
         "uptime_seconds": uptime_seconds,
         "cache": health_data["cache"],
     }

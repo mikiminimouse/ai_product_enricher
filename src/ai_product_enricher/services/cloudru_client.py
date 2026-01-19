@@ -1,6 +1,7 @@
-"""Zhipu AI API client using OpenAI SDK."""
+"""Cloud.ru (GigaChat) API client using OpenAI SDK."""
 
 import json
+import re
 import time
 from typing import Any
 
@@ -12,14 +13,18 @@ from tenacity import (
     wait_exponential,
 )
 
-from ..core import ZhipuAPIError, get_logger, settings
+from ..core import CloudruAPIError, get_logger, settings
 from ..models import EnrichedProduct, EnrichmentOptions, ProductInput, Source
 
 logger = get_logger(__name__)
 
 
-class ZhipuAIClient:
-    """Client for Zhipu AI API using OpenAI SDK compatibility."""
+class CloudruClient:
+    """Client for Cloud.ru (GigaChat) API using OpenAI SDK compatibility.
+
+    Optimized for Russian product data enrichment.
+    Does not support web search (not available in Cloud.ru API).
+    """
 
     def __init__(
         self,
@@ -28,7 +33,7 @@ class ZhipuAIClient:
         model: str | None = None,
         timeout: int | None = None,
     ) -> None:
-        """Initialize Zhipu AI client.
+        """Initialize Cloud.ru client.
 
         Args:
             api_key: API key (default from settings)
@@ -36,35 +41,47 @@ class ZhipuAIClient:
             model: Model name (default from settings)
             timeout: Request timeout in seconds (default from settings)
         """
-        self._api_key = api_key or settings.zhipuai_api_key
-        self._base_url = base_url or settings.zhipuai_base_url
-        self._model = model or settings.zhipuai_model
-        self._timeout = timeout or settings.zhipuai_timeout
+        self._api_key = api_key or settings.cloudru_api_key
+        self._base_url = base_url or settings.cloudru_base_url
+        self._model = model or settings.cloudru_model
+        self._timeout = timeout or settings.cloudru_timeout
 
-        self._client = AsyncOpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
-            timeout=self._timeout,
-        )
+        if not self._api_key:
+            logger.warning(
+                "cloudru_client_no_api_key",
+                message="Cloud.ru API key not configured, client will not be functional",
+            )
+            self._client = None
+        else:
+            self._client = AsyncOpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                timeout=self._timeout,
+            )
 
-        logger.info(
-            "zhipu_client_initialized",
-            model=self._model,
-            base_url=self._base_url,
-        )
+            logger.info(
+                "cloudru_client_initialized",
+                model=self._model,
+                base_url=self._base_url,
+            )
 
     @property
     def provider_name(self) -> str:
         """Return the provider name for metadata."""
-        return "zhipuai"
+        return "cloudru"
 
     @property
     def model_name(self) -> str:
         """Return the model name being used."""
         return self._model
 
+    @property
+    def is_configured(self) -> bool:
+        """Check if the client is properly configured with API key."""
+        return self._client is not None
+
     def _build_system_prompt(self, options: EnrichmentOptions) -> str:
-        """Build system prompt for product enrichment.
+        """Build system prompt for product enrichment (optimized for Russian).
 
         Args:
             options: Enrichment options
@@ -72,62 +89,53 @@ class ZhipuAIClient:
         Returns:
             System prompt string
         """
-        language_name = {
-            "ru": "Russian",
-            "en": "English",
-            "zh": "Chinese",
-            "es": "Spanish",
-            "de": "German",
-            "fr": "French",
-        }.get(options.language, options.language)
+        return f"""Ты профессиональный аналитик продуктовых данных и специалист по контенту. Твоя задача — анализировать информацию о товарах из прайс-листов и закупочных документов и обогащать её структурированными данными.
 
-        return f"""You are a professional product data analyst and content specialist. Your task is to analyze product information from price lists or procurement documents and enrich it with structured data.
+КРИТИЧЕСКАЯ ЗАДАЧА — ИЗВЛЕЧЕНИЕ И ИДЕНТИФИКАЦИЯ:
+Пользователь предоставляет только НАЗВАНИЕ товара (из прайс-листа/закупки) и опционально ОПИСАНИЕ.
+Ты ДОЛЖЕН извлечь/определить следующее из этой ограниченной информации:
 
-CRITICAL TASK - EXTRACT AND IDENTIFY:
-The user provides only a product NAME (from price list/procurement) and optionally a free-form DESCRIPTION.
-You MUST extract/determine the following from this limited information:
+1. **ПРОИЗВОДИТЕЛЬ (manufacturer)** — Компания, которая ФИЗИЧЕСКИ ПРОИЗВОДИТ товар.
+   - Это НЕ всегда совпадает с брендом/торговой маркой
+   - Примеры: Foxconn производит iPhone, Pegatron производит MacBook
+   - Для многих товаров производитель = торговая марка (например, Samsung производит телевизоры Samsung)
+   - Для российских товаров: обрати особое внимание на отечественных производителей
 
-1. **MANUFACTURER** (производитель) - The company that PHYSICALLY MANUFACTURES the product.
-   - This is NOT always the same as the brand/trademark
-   - Examples: Foxconn manufactures iPhones, Pegatron manufactures MacBooks
-   - For many products, manufacturer = trademark (e.g., Samsung manufactures Samsung TVs)
-   - Use web search if needed to find the actual manufacturer
+2. **ТОРГОВАЯ МАРКА (trademark)** — БРЕНД, под которым продаётся товар.
+   - Это коммерческий бренд, видимый потребителям
+   - Примеры: Apple, Samsung, HP, Bosch, Xiaomi, Яндекс, Касперский
 
-2. **TRADEMARK** (торговая марка) - The BRAND NAME under which the product is sold.
-   - This is the commercial brand visible to consumers
-   - Examples: Apple, Samsung, HP, Bosch, Xiaomi
+3. **КАТЕГОРИЯ (category)** — Категория товара (смартфоны, ноутбуки, принтеры и т.д.)
 
-3. **CATEGORY** - Product category (e.g., smartphones, laptops, printers, etc.)
+4. **МОДЕЛЬ (model_name)** — Конкретный идентификатор модели/артикул
 
-4. **MODEL_NAME** - The specific model identifier/number
+ВАЖНЫЕ ПРАВИЛА:
+1. Генерируй контент на русском языке
+2. Будь точен и достоверен
+3. Если производитель не может быть определён точно, укажи его равным торговой марке
+4. Извлекай максимум структурированных данных из названия товара
+5. Фокусируйся на запрошенных полях: {", ".join(options.fields)}
 
-IMPORTANT GUIDELINES:
-1. Generate content in {language_name} language
-2. Be factual and accurate - use web search to verify manufacturer if unsure
-3. If manufacturer cannot be determined with certainty, set it to the same as trademark
-4. Extract as much structured data as possible from the product name
-5. Focus on the requested fields: {", ".join(options.fields)}
+ФОРМАТ ВЫВОДА:
+Ты должен ответить валидным JSON-объектом, содержащим ТОЛЬКО запрошенные поля.
+Не включай блоки кода markdown или другое форматирование.
 
-OUTPUT FORMAT:
-You must respond with a valid JSON object containing ONLY the requested fields.
-Do not include markdown code blocks or any other formatting.
+Доступные поля и их ожидаемые форматы:
+- "manufacturer": Компания-производитель (строка)
+- "trademark": Торговая марка/бренд (строка)
+- "category": Категория товара (строка)
+- "model_name": Идентификатор модели (строка)
+- "description": Подробное описание товара (строка, 2-4 предложения)
+- "features": Ключевые характеристики (массив строк, макс {options.max_features} элементов)
+- "specifications": Технические характеристики (объект с парами ключ-значение)
+- "seo_keywords": SEO-ключевые слова (массив строк, макс {options.max_keywords} элементов)
+- "marketing_copy": Промо-текст (строка, 1-2 предложения)
+- "pros": Преимущества товара (массив строк)
+- "cons": Недостатки товара (массив строк)
 
-Available fields and their expected formats:
-- "manufacturer": Company that physically produces the product (string)
-- "trademark": Brand/trademark name (string)
-- "category": Product category (string)
-- "model_name": Product model identifier (string)
-- "description": A comprehensive product description (string, 2-4 sentences)
-- "features": Key product features (array of strings, max {options.max_features} items)
-- "specifications": Technical specifications (object with key-value pairs)
-- "seo_keywords": SEO-friendly keywords (array of strings, max {options.max_keywords} items)
-- "marketing_copy": Promotional marketing text (string, 1-2 sentences)
-- "pros": Product advantages (array of strings)
-- "cons": Product disadvantages (array of strings)
-
-Example input: "Смартфон Apple iPhone 15 Pro Max 256GB Black Titanium"
-Example response:
-{{"manufacturer": "Foxconn", "trademark": "Apple", "category": "Смартфоны", "model_name": "iPhone 15 Pro Max 256GB", "description": "Флагманский смартфон Apple...", "features": ["Чип A17 Pro", "Титановый корпус"], "specifications": {{"storage": "256GB", "color": "Black Titanium"}}}}"""
+Пример входа: "Яндекс Станция Макс с Алисой"
+Пример ответа:
+{{"manufacturer": "Яндекс", "trademark": "Яндекс", "category": "Умные колонки", "model_name": "Станция Макс", "description": "Флагманская умная колонка Яндекс с голосовым помощником Алиса...", "features": ["Голосовой помощник Алиса", "Качественный звук"], "specifications": {{"тип": "умная колонка", "голосовой помощник": "Алиса"}}}}"""
 
     def _build_user_prompt(self, product: ProductInput, options: EnrichmentOptions) -> str:
         """Build user prompt for product enrichment.
@@ -139,38 +147,22 @@ Example response:
         Returns:
             User prompt string
         """
-        prompt = f"""Analyze and enrich the following product from a price list/procurement document:
+        prompt = f"""Проанализируй и обогати следующий товар из прайс-листа/закупочного документа:
 
 {product.to_prompt_context()}
 
-REQUIRED TASKS:
-1. Extract/determine the MANUFACTURER (who physically makes this product)
-2. Extract/determine the TRADEMARK (brand name)
-3. Determine the product CATEGORY
-4. Extract the MODEL NAME/NUMBER
-5. Generate other requested fields
+ОБЯЗАТЕЛЬНЫЕ ЗАДАЧИ:
+1. Извлечь/определить ПРОИЗВОДИТЕЛЯ (кто физически производит этот товар)
+2. Извлечь/определить ТОРГОВУЮ МАРКУ (название бренда)
+3. Определить КАТЕГОРИЮ товара
+4. Извлечь НАЗВАНИЕ МОДЕЛИ/АРТИКУЛ
+5. Сгенерировать другие запрошенные поля
 
-Generate the following fields: {", ".join(options.fields)}
+Сгенерируй следующие поля: {", ".join(options.fields)}
 
-Respond with a valid JSON object only. No markdown, no explanations."""
+Ответь только валидным JSON-объектом. Без markdown, без пояснений."""
 
         return prompt
-
-    def _build_tools(self) -> list[dict[str, Any]]:
-        """Build tools configuration for web search.
-
-        Returns:
-            List of tool configurations
-        """
-        return [
-            {
-                "type": "web_search",
-                "web_search": {
-                    "enable": True,
-                    "search_result": True,
-                },
-            }
-        ]
 
     def _parse_response(
         self, content: str, options: EnrichmentOptions
@@ -184,9 +176,7 @@ Respond with a valid JSON object only. No markdown, no explanations."""
         Returns:
             Tuple of (EnrichedProduct, list of Sources)
         """
-        import re
-
-        sources: list[Source] = []
+        sources: list[Source] = []  # Cloud.ru doesn't support web search
         data: dict[str, Any] = {}
 
         # Try to extract JSON from response
@@ -210,7 +200,6 @@ Respond with a valid JSON object only. No markdown, no explanations."""
                 try:
                     data = json.loads(json_str)
                 except json.JSONDecodeError:
-                    # Try to repair truncated JSON by extracting individual fields
                     logger.warning("attempting_json_repair", content_length=len(content))
                     data = self._extract_fields_manually(content, options)
             else:
@@ -219,12 +208,10 @@ Respond with a valid JSON object only. No markdown, no explanations."""
 
         # Build EnrichedProduct from parsed data
         enriched = EnrichedProduct(
-            # Extracted identification fields
             manufacturer=data.get("manufacturer") if "manufacturer" in options.fields else None,
             trademark=data.get("trademark") if "trademark" in options.fields else None,
             category=data.get("category") if "category" in options.fields else None,
             model_name=data.get("model_name") if "model_name" in options.fields else None,
-            # Content fields
             description=data.get("description") if "description" in options.fields else None,
             features=data.get("features", []) if "features" in options.fields else [],
             specifications=(
@@ -250,11 +237,8 @@ Respond with a valid JSON object only. No markdown, no explanations."""
         Returns:
             Dictionary with extracted fields
         """
-        import re
-
         data: dict[str, Any] = {}
 
-        # Helper function to extract string field
         def extract_string_field(field_name: str) -> str | None:
             match = re.search(rf'"{field_name}"\s*:\s*"([^"]*(?:\\.[^"]*)*)"', content)
             if match:
@@ -282,7 +266,6 @@ Respond with a valid JSON object only. No markdown, no explanations."""
             if val:
                 data["model_name"] = val
 
-        # Extract description
         if "description" in options.fields:
             val = extract_string_field("description")
             if val:
@@ -327,7 +310,7 @@ Respond with a valid JSON object only. No markdown, no explanations."""
         product: ProductInput,
         options: EnrichmentOptions,
     ) -> tuple[EnrichedProduct, list[Source], int, int]:
-        """Enrich a product using Zhipu AI.
+        """Enrich a product using Cloud.ru (GigaChat).
 
         Args:
             product: Product to enrich
@@ -337,12 +320,28 @@ Respond with a valid JSON object only. No markdown, no explanations."""
             Tuple of (EnrichedProduct, Sources, tokens_used, processing_time_ms)
 
         Raises:
-            ZhipuAPIError: If API call fails
+            CloudruAPIError: If API call fails or client not configured
         """
+        if not self._client:
+            raise CloudruAPIError(
+                message="Cloud.ru client not configured - CLOUDRU_API_KEY not set",
+                details={"product_name": product.name},
+            )
+
         start_time = time.time()
 
-        system_prompt = self._build_system_prompt(options)
-        user_prompt = self._build_user_prompt(product, options)
+        # Force disable web search for Cloud.ru (not supported)
+        effective_options = EnrichmentOptions(
+            include_web_search=False,  # Cloud.ru doesn't support web search
+            language=options.language,
+            fields=options.fields,
+            search_recency=options.search_recency,
+            max_features=options.max_features,
+            max_keywords=options.max_keywords,
+        )
+
+        system_prompt = self._build_system_prompt(effective_options)
+        user_prompt = self._build_user_prompt(product, effective_options)
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -350,25 +349,18 @@ Respond with a valid JSON object only. No markdown, no explanations."""
         ]
 
         try:
-            # Build request kwargs
-            kwargs: dict[str, Any] = {
-                "model": self._model,
-                "messages": messages,
-                "temperature": 0.3,
-                "max_tokens": 4000,
-            }
-
-            # Add web search tool if enabled
-            if options.include_web_search:
-                kwargs["tools"] = self._build_tools()
-
             logger.debug(
-                "zhipu_request",
+                "cloudru_request",
                 product_name=product.name,
-                web_search=options.include_web_search,
             )
 
-            response = await self._client.chat.completions.create(**kwargs)
+            response = await self._client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                temperature=0.5,
+                max_tokens=2500,
+                top_p=0.95,
+            )
 
             processing_time_ms = int((time.time() - start_time) * 1000)
 
@@ -379,43 +371,46 @@ Respond with a valid JSON object only. No markdown, no explanations."""
             tokens_used = response.usage.total_tokens if response.usage else 0
 
             logger.info(
-                "zhipu_response",
+                "cloudru_response",
                 product_name=product.name,
                 tokens=tokens_used,
                 processing_time_ms=processing_time_ms,
             )
 
             # Parse response
-            enriched, sources = self._parse_response(content, options)
+            enriched, sources = self._parse_response(content, effective_options)
 
             return enriched, sources, tokens_used, processing_time_ms
 
         except Exception as e:
             processing_time_ms = int((time.time() - start_time) * 1000)
             logger.error(
-                "zhipu_api_error",
+                "cloudru_api_error",
                 product_name=product.name,
                 error=str(e),
                 processing_time_ms=processing_time_ms,
             )
-            raise ZhipuAPIError(
-                message=f"Zhipu API request failed: {e!s}",
+            raise CloudruAPIError(
+                message=f"Cloud.ru API request failed: {e!s}",
                 details={"product_name": product.name},
             ) from e
 
     async def health_check(self) -> bool:
-        """Check if Zhipu AI API is accessible.
+        """Check if Cloud.ru API is accessible.
 
         Returns:
             True if API is accessible, False otherwise
         """
+        if not self._client:
+            return False
+
         try:
             response = await self._client.chat.completions.create(
                 model=self._model,
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=5,
+                messages=[{"role": "user", "content": "Привет"}],
+                max_tokens=10,
             )
             return response.choices[0].message.content is not None
         except Exception as e:
-            logger.warning("zhipu_health_check_failed", error=str(e))
+            logger.warning("cloudru_health_check_failed", error=str(e))
             return False

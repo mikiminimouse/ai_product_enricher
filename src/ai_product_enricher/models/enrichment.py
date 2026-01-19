@@ -139,6 +139,10 @@ class EnrichmentMetadata(BaseModel):
     """Metadata about the enrichment process."""
 
     model_used: str = Field(..., description="AI model used for enrichment")
+    llm_provider: str = Field(
+        default="zhipuai",
+        description="LLM provider used for enrichment (zhipuai, cloudru)",
+    )
     tokens_used: int = Field(..., ge=0, description="Total tokens consumed")
     processing_time_ms: int = Field(..., ge=0, description="Processing time in milliseconds")
     web_search_used: bool = Field(..., description="Whether web search was used")

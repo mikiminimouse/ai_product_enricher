@@ -17,29 +17,69 @@ from ..models import (
     ProductInput,
 )
 from .cache import CacheService
+from .cloudru_client import CloudruClient
+from .llm_base import LLMClient
 from .zhipu_client import ZhipuAIClient
 
 logger = get_logger(__name__)
 
+# Country codes for Russian products routing
+RUSSIAN_COUNTRY_CODES = {"RU", "RUS"}
+
 
 class ProductEnricherService:
-    """Service for enriching product data."""
+    """Service for enriching product data.
+
+    Supports routing between LLM providers based on country_origin:
+    - Russian products (RU/RUS) -> Cloud.ru (GigaChat)
+    - Foreign products -> Z.ai (GLM-4.7)
+    """
 
     def __init__(
         self,
         zhipu_client: ZhipuAIClient | None = None,
+        cloudru_client: CloudruClient | None = None,
         cache_service: CacheService | None = None,
     ) -> None:
         """Initialize enricher service.
 
         Args:
             zhipu_client: Zhipu AI client (creates default if not provided)
+            cloudru_client: Cloud.ru client (creates default if not provided)
             cache_service: Cache service (creates default if not provided)
         """
         self._zhipu_client = zhipu_client or ZhipuAIClient()
+        self._cloudru_client = cloudru_client or CloudruClient()
         self._cache = cache_service or CacheService()
 
-        logger.info("enricher_service_initialized")
+        logger.info(
+            "enricher_service_initialized",
+            cloudru_configured=self._cloudru_client.is_configured,
+        )
+
+    def _select_client(self, country_origin: str | None) -> LLMClient:
+        """Select LLM client based on country of origin.
+
+        Args:
+            country_origin: Country code (ISO 3166-1 alpha-2/3)
+
+        Returns:
+            LLM client to use for enrichment
+        """
+        # Route Russian products to Cloud.ru if configured
+        if (
+            country_origin
+            and country_origin.upper() in RUSSIAN_COUNTRY_CODES
+            and self._cloudru_client.is_configured
+        ):
+            logger.debug(
+                "routing_to_cloudru",
+                country_origin=country_origin,
+            )
+            return self._cloudru_client
+
+        # Default to Zhipu AI for all other products
+        return self._zhipu_client
 
     async def enrich_product(
         self,
@@ -62,9 +102,14 @@ class ProductEnricherService:
         """
         options = options or EnrichmentOptions()
 
+        # Select LLM client based on country_origin
+        client = self._select_client(product.country_origin)
+
         logger.info(
             "enriching_product",
             product_name=product.name,
+            country_origin=product.country_origin,
+            llm_provider=client.provider_name,
             language=options.language,
             web_search=options.include_web_search,
         )
@@ -82,20 +127,21 @@ class ProductEnricherService:
                 return cached
 
         try:
-            # Call Zhipu AI for enrichment
+            # Call selected LLM for enrichment
             (
                 enriched,
                 sources,
                 tokens_used,
                 processing_time_ms,
-            ) = await self._zhipu_client.enrich_product(product, options)
+            ) = await client.enrich_product(product, options)
 
-            # Build result
+            # Build result with provider info
             metadata = EnrichmentMetadata(
-                model_used=settings.zhipuai_model,
+                model_used=client.model_name,
+                llm_provider=client.provider_name,
                 tokens_used=tokens_used,
                 processing_time_ms=processing_time_ms,
-                web_search_used=options.include_web_search,
+                web_search_used=options.include_web_search and client.provider_name == "zhipuai",
                 cached=False,
                 timestamp=datetime.utcnow(),
             )
@@ -119,6 +165,7 @@ class ProductEnricherService:
             logger.info(
                 "product_enriched",
                 product_name=product.name,
+                llm_provider=client.provider_name,
                 tokens=tokens_used,
                 time_ms=processing_time_ms,
             )
@@ -129,6 +176,7 @@ class ProductEnricherService:
             logger.error(
                 "enrichment_failed",
                 product_name=product.name,
+                llm_provider=client.provider_name,
                 error=str(e),
             )
             raise EnrichmentError(
@@ -257,15 +305,25 @@ class ProductEnricherService:
         return self._cache.get_stats()
 
     async def health_check(self) -> dict[str, Any]:
-        """Perform health check.
+        """Perform health check for all LLM providers.
 
         Returns:
-            Health check result
+            Health check result including status of all providers
         """
         zhipu_healthy = await self._zhipu_client.health_check()
+
+        # Check Cloud.ru only if configured
+        cloudru_status: str
+        if self._cloudru_client.is_configured:
+            cloudru_healthy = await self._cloudru_client.health_check()
+            cloudru_status = "connected" if cloudru_healthy else "disconnected"
+        else:
+            cloudru_status = "not_configured"
+
         cache_stats = self._cache.get_stats()
 
         return {
             "zhipu_api": "connected" if zhipu_healthy else "disconnected",
+            "cloudru_api": cloudru_status,
             "cache": cache_stats,
         }
