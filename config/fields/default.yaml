@@ -1,0 +1,221 @@
+# Default field definitions for product enrichment
+# All display names and descriptions are in Russian
+
+name: default
+description: Стандартный набор полей для обогащения товаров
+version: "1.0"
+
+fields:
+  manufacturer:
+    display_name: Производитель
+    description: |
+      Компания-производитель, которая физически изготавливает товар.
+      Это фабрика или завод, где товар был произведен, а не бренд.
+      Например: Foxconn производит iPhone для Apple.
+    type: string
+    required: false
+    extraction_hints:
+      - Ищи информацию о заводе-изготовителе
+      - Производитель может отличаться от бренда
+      - Часто указывается как "Made by" или "Manufactured by"
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output: "Foxconn"
+      - input: "Samsung Galaxy S24 Ultra"
+        output: "Samsung Electronics"
+      - input: "Яндекс Станция Макс"
+        output: "Яндекс"
+
+  trademark:
+    display_name: Торговая марка
+    description: |
+      Бренд или торговая марка, под которой продается товар.
+      Это название, которое потребитель видит на упаковке и в рекламе.
+    type: string
+    required: false
+    extraction_hints:
+      - Бренд обычно самое известное название в названии товара
+      - Часто стоит в начале названия товара
+      - Может отличаться от производителя
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output: "Apple"
+      - input: "Xiaomi Redmi Note 13 Pro"
+        output: "Xiaomi"
+      - input: "Яндекс Станция Макс"
+        output: "Яндекс"
+
+  category:
+    display_name: Категория
+    description: |
+      Основная товарная категория, к которой относится продукт.
+      Используй общепринятые названия категорий на русском языке.
+    type: string
+    required: false
+    extraction_hints:
+      - Категория должна быть понятной для обычного покупателя
+      - Используй иерархию: общая категория > подкатегория
+      - Примеры категорий: Электроника, Бытовая техника, Одежда
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output: "Смартфоны"
+      - input: "Samsung QN85C 65\" Neo QLED 4K"
+        output: "Телевизоры"
+      - input: "Bosch Serie 6 WAU28S90BY"
+        output: "Стиральные машины"
+
+  model_name:
+    display_name: Модель
+    description: |
+      Точное название модели или артикул товара.
+      Включает буквенно-цифровое обозначение модели.
+    type: string
+    required: false
+    extraction_hints:
+      - Модель обычно содержит цифры и буквы
+      - Может включать серию и версию
+      - Не включай объем памяти или цвет в название модели
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB Black Titanium"
+        output: "iPhone 15 Pro Max"
+      - input: "Samsung Galaxy S24 Ultra 512GB"
+        output: "Galaxy S24 Ultra"
+      - input: "Яндекс Станция Макс"
+        output: "Станция Макс"
+
+  description:
+    display_name: Описание
+    description: |
+      Краткое, информативное описание товара для каталога.
+      Должно быть 2-4 предложения, описывающих ключевые особенности.
+    type: string
+    required: false
+    extraction_hints:
+      - Начни с того, что это за товар
+      - Упомяни 2-3 главные особенности
+      - Используй нейтральный, информативный тон
+      - Избегай рекламных преувеличений
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output: "Флагманский смартфон Apple с 6.7-дюймовым дисплеем Super Retina XDR, процессором A17 Pro и профессиональной системой камер. Корпус выполнен из титана, поддерживается USB-C и функции Action Button."
+
+  features:
+    display_name: Ключевые характеристики
+    description: |
+      Список из 5-8 ключевых особенностей товара.
+      Каждая особенность должна быть краткой и информативной.
+    type: array
+    required: false
+    extraction_hints:
+      - Выделяй уникальные особенности товара
+      - Используй маркированный список
+      - Каждый пункт - одна особенность
+      - Не дублируй технические характеристики
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output:
+          - "Титановый корпус"
+          - "Процессор A17 Pro"
+          - "Дисплей 6.7\" Super Retina XDR"
+          - "Кнопка Action Button"
+          - "USB-C порт"
+          - "Профессиональная камера 48 МП"
+
+  specifications:
+    display_name: Технические характеристики
+    description: |
+      Словарь технических характеристик товара.
+      Ключи - названия параметров, значения - их значения.
+    type: object
+    required: false
+    extraction_hints:
+      - Используй стандартные названия параметров
+      - Указывай единицы измерения
+      - Включай только проверенные данные
+      - Группируй по категориям если много параметров
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output:
+          "Дисплей": "6.7\" OLED, 2796x1290"
+          "Процессор": "Apple A17 Pro"
+          "Память": "256 ГБ"
+          "Камера": "48 МП + 12 МП + 12 МП"
+          "Аккумулятор": "4422 мАч"
+
+  seo_keywords:
+    display_name: SEO ключевые слова
+    description: |
+      Список ключевых слов для поисковой оптимизации.
+      Включает синонимы, вариации написания, поисковые запросы.
+    type: array
+    required: false
+    extraction_hints:
+      - Включи название бренда и модели
+      - Добавь популярные поисковые запросы
+      - Используй разные формы слов
+      - Включи категорию товара
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output:
+          - "iPhone 15 Pro Max"
+          - "айфон 15 про макс"
+          - "Apple смартфон"
+          - "купить iPhone"
+          - "флагман Apple 2023"
+
+  marketing_copy:
+    display_name: Маркетинговый текст
+    description: |
+      Рекламный текст для привлечения покупателей.
+      Должен быть эмоциональным и убедительным.
+    type: string
+    required: false
+    extraction_hints:
+      - Используй эмоциональный язык
+      - Подчеркни выгоды для покупателя
+      - Создай ощущение уникальности
+      - Добавь призыв к действию
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output: "Откройте новые возможности с iPhone 15 Pro Max — флагманом, который переопределяет стандарты мобильных технологий. Титановый корпус, революционный процессор A17 Pro и профессиональная камера позволят вам создавать контент студийного качества прямо в кармане."
+
+  pros:
+    display_name: Преимущества
+    description: |
+      Список преимуществ товара.
+      Плюсы, которые выделяют товар среди конкурентов.
+    type: array
+    required: false
+    extraction_hints:
+      - Фокусируйся на реальных преимуществах
+      - Сравнивай с конкурентами
+      - Используй факты, не рекламные клише
+      - 4-6 пунктов достаточно
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output:
+          - "Мощнейший процессор на рынке"
+          - "Отличная автономность"
+          - "Премиальные материалы корпуса"
+          - "Длительная поддержка обновлений"
+          - "Широкая экосистема аксессуаров"
+
+  cons:
+    display_name: Недостатки
+    description: |
+      Список недостатков или ограничений товара.
+      Честная оценка минусов для объективного описания.
+    type: array
+    required: false
+    extraction_hints:
+      - Будь объективным и честным
+      - Указывай реальные ограничения
+      - Не преувеличивай недостатки
+      - 3-5 пунктов достаточно
+    examples:
+      - input: "Apple iPhone 15 Pro Max 256GB"
+        output:
+          - "Высокая цена"
+          - "Нет слота для карты памяти"
+          - "Ограниченная кастомизация iOS"
+          - "Тяжелый (221 г)"

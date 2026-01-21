@@ -47,6 +47,10 @@ htmlcov/
 *.log
 logs/
 
+# Server runtime files
+server.pid
+webui.log
+
 # Local configuration
 .env
 *.local

@@ -1,0 +1,42 @@
+# Default enrichment profile
+# Defines standard settings for product enrichment
+
+name: default
+description: Стандартный профиль обогащения товаров
+version: "1.0"
+is_default: true
+
+# Prompt configuration
+prompts:
+  system: default
+  user: default
+
+# Field configuration
+fields:
+  preset: default
+  enabled:
+    - manufacturer
+    - trademark
+    - category
+    - model_name
+    - description
+    - features
+    - specifications
+    - seo_keywords
+  custom: []
+
+# LLM configuration
+llm:
+  temperature: 0.3
+  max_tokens: 4000
+  top_p: 0.95
+
+# Cache configuration
+cache:
+  enabled: true
+  ttl_seconds: 3600
+
+# Web search configuration
+web_search:
+  enabled: true
+  max_results: 5

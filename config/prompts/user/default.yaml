@@ -1,0 +1,37 @@
+# Default user prompt template for product enrichment
+# Uses Jinja2 templating for dynamic content injection
+
+name: default
+description: Стандартный пользовательский промпт для запроса обогащения
+version: "1.0"
+
+# Variables available in template:
+# - product_name: string - название товара
+# - product_description: string | None - описание товара
+# - fields_list: list[str] - список запрошенных полей
+# - context_data: dict | None - дополнительный контекст
+
+template: |
+  Обогати информацию о следующем товаре:
+
+  ## Товар
+  **Название**: {{ product_name }}
+  {% if product_description %}
+
+  **Описание**: {{ product_description }}
+  {% endif %}
+
+  {% if context_data %}
+  ## Дополнительный контекст
+  {% for key, value in context_data.items() %}
+  - **{{ key }}**: {{ value }}
+  {% endfor %}
+  {% endif %}
+
+  ## Запрошенные поля
+  Извлеки следующие поля:
+  {% for field in fields_list %}
+  - {{ field }}
+  {% endfor %}
+
+  Верни результат в формате JSON.

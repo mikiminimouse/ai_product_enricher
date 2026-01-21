@@ -76,9 +76,94 @@
 - **Пакетная обработка** нескольких продуктов
 - **Встроенное кэширование** результатов (TTL 1 час)
 - **RESTful API** с OpenAPI документацией
+- **Gradio WebUI** — веб-интерфейс для тестирования и настройки
+- **Конфигурируемые поля и промпты** — YAML-based конфигурация
+- **Профили обогащения** — переключение между настройками
 - **Структурированное логирование** (structlog)
 - **Docker-ready**
 - **Retry logic** с tenacity
+
+## WebUI — Веб-интерфейс
+
+Сервис включает Gradio WebUI для тестирования и настройки обогащения.
+
+### Запуск WebUI
+
+```bash
+# Только WebUI (демо-режим, без enricher)
+python -m src.ai_product_enricher.main_webui
+
+# WebUI с enricher service (полный функционал)
+python -m src.ai_product_enricher.main_webui --with-enricher
+
+# С публичной ссылкой
+python -m src.ai_product_enricher.main_webui --port 7860 --share
+```
+
+WebUI доступен на `http://localhost:7860`
+
+### Вкладки WebUI
+
+| Вкладка | Описание |
+|---------|----------|
+| **Тестирование** | Обогащение товаров, выбор полей, preview промптов |
+| **Настройка полей** | Просмотр и редактирование определений полей |
+| **Редактор промптов** | Редактирование Jinja2 шаблонов системных и пользовательских промптов |
+| **Профили** | Создание, редактирование и переключение профилей обогащения |
+
+### Структура конфигурации
+
+```
+config/
+├── prompts/
+│   ├── system/
+│   │   ├── default.yaml          # Стандартный системный промпт
+│   │   └── russian_products.yaml # Для российских товаров
+│   └── user/
+│       └── default.yaml          # Пользовательский промпт
+├── fields/
+│   ├── default.yaml              # Определения 11 полей
+│   └── custom/                   # Кастомные поля
+└── profiles/
+    ├── default.yaml              # Профиль по умолчанию
+    └── custom/                   # Кастомные профили
+```
+
+### Engine Layer
+
+Конфигурируемая платформа включает три компонента:
+
+| Компонент | Описание |
+|-----------|----------|
+| `FieldRegistry` | Реестр полей для извлечения с описаниями и примерами |
+| `PromptEngine` | Движок Jinja2 шаблонов для генерации промптов |
+| `ConfigurationManager` | Менеджер профилей обогащения |
+
+```python
+from src.ai_product_enricher.engine import (
+    FieldRegistry,
+    PromptEngine,
+    ConfigurationManager,
+)
+
+# Инициализация
+registry = FieldRegistry()
+engine = PromptEngine()
+config = ConfigurationManager()
+
+# Получение полей
+fields = registry.get_fields_for_extraction(["manufacturer", "category"])
+
+# Генерация промпта
+system_prompt = engine.render_system_prompt(
+    template_name="default",
+    field_names=["manufacturer", "trademark", "category"],
+    web_search_enabled=True,
+)
+
+# Работа с профилями
+profile = config.get_active_profile()
+```
 
 ## Быстрый старт
 
@@ -383,6 +468,14 @@ Fixtures находятся в `tests/conftest.py`:
 
 ```
 ai_product_enricher/
+├── config/                   # Конфигурационные файлы
+│   ├── prompts/              # Шаблоны промптов
+│   │   ├── system/           # Системные промпты
+│   │   └── user/             # Пользовательские промпты
+│   ├── fields/               # Определения полей
+│   │   └── custom/           # Кастомные поля
+│   └── profiles/             # Профили обогащения
+│       └── custom/           # Кастомные профили
 ├── src/ai_product_enricher/
 │   ├── api/              # API endpoints
 │   │   ├── v1/           # API версия 1
@@ -393,6 +486,10 @@ ai_product_enricher/
 │   │   ├── config.py          # Конфигурация
 │   │   ├── logging.py         # Логирование
 │   │   └── exceptions.py      # Исключения
+│   ├── engine/           # Configuration Engine Layer
+│   │   ├── field_registry.py  # Реестр полей
+│   │   ├── prompt_engine.py   # Движок промптов
+│   │   └── config_manager.py  # Менеджер профилей
 │   ├── models/           # Pydantic models
 │   │   ├── enrichment.py      # Модели обогащения
 │   │   └── schemas.py         # API схемы
@@ -401,7 +498,10 @@ ai_product_enricher/
 │   │   ├── zhipu_client.py    # Z.ai клиент
 │   │   ├── cloudru_client.py  # Cloud.ru клиент
 │   │   └── cache.py           # Кэш сервис
-│   └── main.py           # FastAPI app
+│   ├── webui/            # Gradio WebUI
+│   │   └── app.py             # WebUI приложение
+│   ├── main.py           # FastAPI app
+│   └── main_webui.py     # WebUI entry point
 ├── tests/
 │   ├── unit/            # Unit тесты
 │   ├── integration/     # Integration тесты
