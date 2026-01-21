@@ -7,6 +7,8 @@ import time
 from typing import Any
 
 import gradio as gr
+from gradio.themes.base import Base
+from gradio.themes.utils import colors, fonts, sizes
 
 from ..engine import (
     ConfigurationManager,
@@ -16,6 +18,507 @@ from ..engine import (
     PromptEngine,
     PromptTemplate,
 )
+
+
+# ============================================
+# Custom Theme: Креативный AI стиль
+# ============================================
+class ProductEnricherTheme(Base):
+    """Custom theme for AI Product Enricher with violet/purple accent colors."""
+
+    def __init__(
+        self,
+        *,
+        primary_hue: colors.Color = colors.violet,
+        secondary_hue: colors.Color = colors.purple,
+        neutral_hue: colors.Color = colors.slate,
+        font: fonts.Font | str = fonts.GoogleFont("Inter"),
+        font_mono: fonts.Font | str = fonts.GoogleFont("JetBrains Mono"),
+    ):
+        super().__init__(
+            primary_hue=primary_hue,
+            secondary_hue=secondary_hue,
+            neutral_hue=neutral_hue,
+            font=font,
+            font_mono=font_mono,
+        )
+
+        # Apply custom styling
+        super().set(
+            # Body
+            body_background_fill="linear-gradient(135deg, *neutral_50 0%, *neutral_100 100%)",
+            body_background_fill_dark="linear-gradient(135deg, *neutral_900 0%, *neutral_950 100%)",
+
+            # Buttons
+            button_primary_background_fill="linear-gradient(135deg, *primary_500, *secondary_500)",
+            button_primary_background_fill_hover="linear-gradient(135deg, *primary_600, *secondary_600)",
+            button_primary_text_color="white",
+            button_primary_border_color="transparent",
+            button_primary_shadow="0 4px 14px 0 rgba(139, 92, 246, 0.39)",
+            button_primary_shadow_hover="0 6px 20px 0 rgba(139, 92, 246, 0.5)",
+            button_secondary_background_fill="*neutral_100",
+            button_secondary_background_fill_hover="*neutral_200",
+            button_secondary_border_color="*neutral_300",
+            button_border_width="1px",
+            button_large_radius="*radius_lg",
+            button_small_radius="*radius_md",
+
+            # Inputs
+            input_background_fill="white",
+            input_background_fill_dark="*neutral_800",
+            input_border_color="*neutral_200",
+            input_border_color_focus="*primary_400",
+            input_border_width="1.5px",
+            input_shadow="0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+            input_shadow_focus="0 0 0 3px rgba(139, 92, 246, 0.15)",
+            input_radius="*radius_md",
+
+            # Blocks
+            block_background_fill="white",
+            block_background_fill_dark="*neutral_850",
+            block_border_width="1px",
+            block_border_color="*neutral_200",
+            block_shadow="0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)",
+            block_title_text_color="*primary_700",
+            block_title_text_weight="600",
+            block_label_text_color="*neutral_700",
+            block_radius="*radius_lg",
+            block_padding="*spacing_lg",
+
+            # Sliders
+            slider_color="*primary_500",
+
+            # Checkboxes
+            checkbox_background_color_selected="*primary_500",
+            checkbox_border_color_selected="*primary_600",
+
+            # Tables
+            table_border_color="*neutral_200",
+            table_even_background_fill="*neutral_50",
+            table_odd_background_fill="white",
+
+            # Spacing
+            layout_gap="*spacing_lg",
+            section_header_text_weight="600",
+        )
+
+
+# ============================================
+# Custom CSS
+# ============================================
+CUSTOM_CSS = """
+/* Градиентный заголовок */
+.main-header {
+    background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 50%, #7C3AED 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 700;
+    font-size: 2.5rem !important;
+    margin-bottom: 0.5rem !important;
+    text-align: center;
+}
+
+.sub-header {
+    color: #64748B;
+    text-align: center;
+    font-size: 1.1rem;
+    margin-bottom: 1.5rem !important;
+}
+
+/* Стилизация вкладок */
+.tabs > .tab-nav > button {
+    font-weight: 500;
+    padding: 12px 24px !important;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.2s ease;
+}
+
+.tabs > .tab-nav > button.selected {
+    background: linear-gradient(135deg, #8B5CF6, #A855F7) !important;
+    color: white !important;
+    border-bottom: none !important;
+}
+
+.tabs > .tab-nav > button:hover:not(.selected) {
+    background: rgba(139, 92, 246, 0.1);
+}
+
+/* Hover-эффекты на кнопках */
+.primary-btn {
+    transition: all 0.3s ease !important;
+}
+
+.primary-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px 0 rgba(139, 92, 246, 0.45) !important;
+}
+
+/* Focus-эффекты на inputs */
+input:focus, textarea:focus {
+    border-color: #8B5CF6 !important;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important;
+}
+
+/* JSON-блоки с акцентной границей */
+.json-output {
+    border-left: 4px solid #8B5CF6 !important;
+    background: linear-gradient(90deg, rgba(139, 92, 246, 0.05) 0%, transparent 100%) !important;
+}
+
+/* Секции с заголовками */
+.section-header {
+    font-size: 1.2rem !important;
+    font-weight: 600 !important;
+    color: #7C3AED !important;
+    border-bottom: 2px solid #E2E8F0;
+    padding-bottom: 8px;
+    margin-bottom: 16px !important;
+}
+
+/* Группы с визуальным разделением */
+.input-group {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.03) 0%, rgba(168, 85, 247, 0.06) 100%) !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
+    box-shadow: 0 2px 12px rgba(139, 92, 246, 0.08) !important;
+    border: 1px solid rgba(139, 92, 246, 0.15) !important;
+}
+
+.output-group {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.02) 0%, rgba(168, 85, 247, 0.05) 100%) !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
+    border: 1px solid rgba(139, 92, 246, 0.12) !important;
+}
+
+/* Блоки Gradio внутри групп */
+.input-group .block,
+.output-group .block,
+.profile-card .block {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Формы внутри групп */
+.input-group .form,
+.output-group .form,
+.profile-card .form {
+    background: transparent !important;
+}
+
+/* Поля ввода */
+.input-group input,
+.input-group textarea,
+.output-group input,
+.output-group textarea,
+.profile-card input,
+.profile-card textarea {
+    background: rgba(255, 255, 255, 0.7) !important;
+    border: 1px solid rgba(139, 92, 246, 0.2) !important;
+}
+
+.input-group input:focus,
+.input-group textarea:focus,
+.output-group input:focus,
+.output-group textarea:focus,
+.profile-card input:focus,
+.profile-card textarea:focus {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-color: #8B5CF6 !important;
+}
+
+/* Статусные сообщения */
+.status-success {
+    color: #10B981 !important;
+    background: rgba(16, 185, 129, 0.1) !important;
+    border: 1px solid #10B981 !important;
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+.status-error {
+    color: #EF4444 !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+    border: 1px solid #EF4444 !important;
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+/* Accordion стилизация */
+.accordion {
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 12px !important;
+    overflow: hidden;
+}
+
+.accordion > .label-wrap {
+    background: linear-gradient(90deg, rgba(139, 92, 246, 0.05) 0%, transparent 100%);
+    padding: 16px !important;
+}
+
+/* Таблица с улучшенным видом */
+.dataframe {
+    border-radius: 8px !important;
+    overflow: hidden;
+}
+
+.dataframe th {
+    background: linear-gradient(135deg, #8B5CF6, #A855F7) !important;
+    color: white !important;
+    font-weight: 600 !important;
+    padding: 12px !important;
+}
+
+.dataframe td {
+    padding: 10px 12px !important;
+}
+
+.dataframe tr:hover {
+    background: rgba(139, 92, 246, 0.08) !important;
+}
+
+/* Код редактор */
+.code-editor {
+    border: 2px solid #E2E8F0 !important;
+    border-radius: 12px !important;
+}
+
+.code-editor:focus-within {
+    border-color: #8B5CF6 !important;
+}
+
+/* Мобильная адаптивность */
+@media (max-width: 768px) {
+    .main-header {
+        font-size: 1.8rem !important;
+    }
+
+    .tabs > .tab-nav > button {
+        padding: 8px 16px !important;
+        font-size: 0.9rem;
+    }
+
+    .input-group, .output-group {
+        padding: 12px;
+    }
+}
+
+/* Иконки в кнопках */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Разделитель секций */
+.section-divider {
+    border-top: 2px solid #E2E8F0;
+    margin: 24px 0;
+    position: relative;
+}
+
+.section-divider::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: -2px;
+    width: 60px;
+    height: 2px;
+    background: linear-gradient(90deg, #8B5CF6, #A855F7);
+}
+
+/* Профили карточки */
+.profile-card {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.04) 0%, rgba(168, 85, 247, 0.07) 100%) !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
+    border: 1px solid rgba(139, 92, 246, 0.15) !important;
+    transition: all 0.2s ease !important;
+}
+
+.profile-card:hover {
+    border-color: rgba(139, 92, 246, 0.4) !important;
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.2) !important;
+}
+
+/* Колонки Gradio */
+.column {
+    background: transparent !important;
+}
+
+/* JSON блоки */
+.json-output {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.02) 0%, rgba(255, 255, 255, 0.5) 100%) !important;
+}
+
+/* Глобальные блоки */
+.block.svelte-1plpy97 {
+    background: transparent !important;
+}
+
+/* Подсказки */
+.hint-text {
+    color: #94A3B8;
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+/* Цвет текста в полях ввода - тёмный для читаемости */
+input, textarea, .svelte-1hguek3 {
+    color: #1E293B !important;
+}
+
+input::placeholder, textarea::placeholder {
+    color: #94A3B8 !important;
+}
+
+/* Disabled textarea (для Preview) */
+textarea:disabled, textarea[disabled] {
+    color: #1E293B !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    opacity: 1 !important;
+    -webkit-text-fill-color: #1E293B !important;
+}
+
+/* Стили чекбоксов */
+.svelte-yb2gcx input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #CBD5E1;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.svelte-yb2gcx input[type="checkbox"]:checked {
+    background: #E2E8F0;
+    border-color: #94A3B8;
+}
+
+.svelte-yb2gcx input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #1E293B;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.svelte-yb2gcx input[type="checkbox"]:hover {
+    border-color: #8B5CF6;
+}
+
+.svelte-yb2gcx label.selected {
+    background: rgba(139, 92, 246, 0.1);
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 2px 0;
+}
+
+/* Общие стили для CheckboxGroup */
+.wrap.svelte-yb2gcx {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.svelte-yb2gcx label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #E2E8F0;
+}
+
+/* Текст span в label checkbox */
+.svelte-yb2gcx span.ml-2,
+.svelte-yb2gcx label span {
+    color: #E2E8F0 !important;
+}
+
+.svelte-yb2gcx label:hover {
+    background: rgba(139, 92, 246, 0.08);
+}
+
+/* Стили для Dropdown - тёмный стиль */
+input[role="listbox"],
+.svelte-1xfsv4t,
+.border-none.svelte-1xfsv4t {
+    color: #E2E8F0 !important;
+    background: transparent !important;
+}
+
+/* Выпадающий список опций */
+[data-testid="dropdown-options"],
+.dropdown-options,
+ul[role="listbox"] {
+    background: white !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Опции в dropdown */
+[data-testid="dropdown-options"] li,
+ul[role="listbox"] li,
+.dropdown-options li {
+    color: #1E293B !important;
+    padding: 8px 12px !important;
+}
+
+[data-testid="dropdown-options"] li:hover,
+ul[role="listbox"] li:hover,
+.dropdown-options li:hover {
+    background: rgba(139, 92, 246, 0.1) !important;
+}
+
+[data-testid="dropdown-options"] li[aria-selected="true"],
+ul[role="listbox"] li[aria-selected="true"],
+.dropdown-options li.selected {
+    background: rgba(139, 92, 246, 0.15) !important;
+    font-weight: 500;
+}
+
+/* Стрелка dropdown - светлая */
+.dropdown-arrow,
+.icon-wrap svg {
+    fill: #94A3B8 !important;
+}
+
+.icon-wrap svg path {
+    fill: #94A3B8 !important;
+}
+
+/* Label в dropdown container */
+.svelte-1xfsv4t.container span[data-testid="block-info"],
+.svelte-1xfsv4t span.svelte-1gfkn6j {
+    color: #94A3B8 !important;
+}
+
+/* Secondary wrap для dropdown - тёмный стиль */
+.secondary-wrap.svelte-1xfsv4t,
+.svelte-1xfsv4t.container {
+    background: #1E293B !important;
+    border: 1px solid #334155 !important;
+    border-radius: 6px !important;
+}
+
+.secondary-wrap.svelte-1xfsv4t:focus-within {
+    border-color: #8B5CF6 !important;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important;
+}
+"""
 
 
 # Country codes for dropdown
@@ -239,7 +742,7 @@ class EnricherWebUI:
 
     def _get_field_details(self, field_name: str) -> tuple[str, str, str, str, str, str]:
         """Get detailed field information for editing."""
-        field_def = self.field_registry.get_field("default", field_name)
+        field_def = self.field_registry.get_field(field_name, "default")
         if not field_def:
             return "", "", "", "", "", ""
 
@@ -440,67 +943,107 @@ class EnricherWebUI:
 
     def create_app(self) -> gr.Blocks:
         """Create the Gradio application."""
+        # Note: In Gradio 6.0+, theme and css should be passed to launch()
+        # We store them as attributes for use in launch()
+        theme = ProductEnricherTheme()
+
         with gr.Blocks(
             title="AI Product Enricher",
-            theme=gr.themes.Soft(),
         ) as app:
-            gr.Markdown("# AI Product Enricher - WebUI")
-            gr.Markdown("Конфигурируемая платформа для обогащения продуктовых данных")
+            # Store theme and css for launch()
+            app._custom_theme = theme
+            app._custom_css = CUSTOM_CSS
+            # Заголовок с градиентом
+            gr.Markdown(
+                "# AI Product Enricher",
+                elem_classes=["main-header"],
+            )
+            gr.Markdown(
+                "Конфигурируемая платформа для обогащения продуктовых данных с мульти-LLM архитектурой",
+                elem_classes=["sub-header"],
+            )
 
-            with gr.Tabs():
+            with gr.Tabs(elem_classes=["tabs"]):
                 # ============================================
                 # Tab 1: Testing
                 # ============================================
-                with gr.TabItem("Тестирование"):
-                    with gr.Row():
-                        with gr.Column(scale=1):
+                with gr.TabItem("🧪 Тестирование", id="testing-tab"):
+                    with gr.Row(equal_height=False):
+                        # Левая колонка - ввод данных
+                        with gr.Column(scale=1, elem_classes=["input-group"]):
+                            gr.Markdown("### 📝 Данные товара", elem_classes=["section-header"])
+
                             profile_dropdown = gr.Dropdown(
                                 choices=self.config_manager.list_profiles(),
                                 value="default",
-                                label="Профиль",
+                                label="Профиль конфигурации",
+                                info="Выберите профиль с предустановленными настройками",
                             )
+
                             product_name_input = gr.Textbox(
                                 label="Название товара",
-                                placeholder="Apple iPhone 15 Pro Max 256GB",
+                                placeholder="Например: Apple iPhone 15 Pro Max 256GB Black Titanium",
                                 lines=1,
+                                info="Полное наименование из прайс-листа или госзакупок",
                             )
+
                             product_desc_input = gr.Textbox(
                                 label="Описание (опционально)",
-                                placeholder="Дополнительное описание товара...",
+                                placeholder="Дополнительные характеристики или описание товара...",
                                 lines=2,
                             )
+
                             country_dropdown = gr.Dropdown(
                                 choices=COUNTRY_CHOICES,
                                 value="",
-                                label="Страна происхождения",
+                                label="🌍 Страна происхождения",
+                                info="Определяет выбор LLM: RU → GigaChat, остальные → GLM-4.7",
                             )
+
+                            gr.Markdown("### 🎯 Настройки обогащения", elem_classes=["section-header"])
+
                             fields_checkbox = gr.CheckboxGroup(
                                 choices=self._get_field_choices(),
                                 value=self._get_default_fields(),
                                 label="Поля для извлечения",
                             )
+
                             web_search_checkbox = gr.Checkbox(
                                 value=True,
-                                label="Использовать веб-поиск",
+                                label="🔍 Использовать веб-поиск",
+                                info="Позволяет LLM искать актуальную информацию",
                             )
+
                             enrich_button = gr.Button(
-                                "Обогатить",
+                                "🚀 Обогатить товар",
                                 variant="primary",
+                                size="lg",
+                                elem_classes=["primary-btn"],
                             )
 
-                        with gr.Column(scale=2):
-                            result_json = gr.JSON(label="Результат обогащения")
-                            metadata_json = gr.JSON(label="Метаданные")
+                        # Правая колонка - результаты
+                        with gr.Column(scale=2, elem_classes=["output-group"]):
+                            gr.Markdown("### 📊 Результаты", elem_classes=["section-header"])
 
-                    with gr.Accordion("Промпты (preview)", open=False):
+                            result_json = gr.JSON(
+                                label="Обогащённые данные",
+                                elem_classes=["json-output"],
+                            )
+
+                            metadata_json = gr.JSON(
+                                label="Метаданные запроса",
+                                elem_classes=["json-output"],
+                            )
+
+                    with gr.Accordion("👁️ Промпты (preview)", open=False, elem_classes=["accordion"]):
                         with gr.Row():
                             system_prompt_preview = gr.Textbox(
-                                label="Системный промпт",
+                                label="📋 Системный промпт",
                                 lines=15,
                                 interactive=False,
                             )
                             user_prompt_preview = gr.Textbox(
-                                label="Пользовательский промпт",
+                                label="📋 Пользовательский промпт",
                                 lines=15,
                                 interactive=False,
                             )
@@ -526,54 +1069,89 @@ class EnricherWebUI:
                 # ============================================
                 # Tab 2: Field Configuration
                 # ============================================
-                with gr.TabItem("Настройка полей"):
-                    with gr.Row():
-                        field_set_dropdown = gr.Dropdown(
-                            choices=list(self.field_registry.get_all_field_sets().keys()),
-                            value="default",
-                            label="Набор полей",
+                with gr.TabItem("⚙️ Настройка полей", id="fields-tab"):
+                    gr.Markdown("### 📋 Доступные поля", elem_classes=["section-header"])
+
+                    with gr.Group(elem_classes=["input-group"]):
+                        with gr.Row():
+                            field_set_dropdown = gr.Dropdown(
+                                choices=list(self.field_registry.get_all_field_sets().keys()),
+                                value="default",
+                                label="Набор полей",
+                                scale=4,
+                            )
+                            refresh_fields_btn = gr.Button(
+                                "🔄 Обновить",
+                                scale=1,
+                                variant="secondary",
+                            )
+
+                        fields_table = gr.Dataframe(
+                            headers=["Имя", "Отображаемое имя", "Тип", "Описание"],
+                            value=self._get_fields_dataframe(),
+                            interactive=False,
+                            wrap=True,
+                            elem_classes=["dataframe"],
                         )
-                        refresh_fields_btn = gr.Button("Обновить", scale=0)
+                        gr.Markdown(
+                            "*Кликните на строку таблицы, чтобы загрузить поле в редактор*",
+                            elem_classes=["hint-text"],
+                        )
 
-                    fields_table = gr.Dataframe(
-                        headers=["Имя", "Отображаемое имя", "Тип", "Описание"],
-                        value=self._get_fields_dataframe(),
-                        interactive=False,
-                        wrap=True,
-                    )
+                    gr.Markdown("### ✏️ Редактор поля", elem_classes=["section-header"])
 
-                    gr.Markdown("### Редактор поля")
-                    with gr.Row():
-                        with gr.Column():
-                            field_name_input = gr.Textbox(label="Имя поля (field name)")
-                            field_display_name = gr.Textbox(label="Отображаемое имя")
-                            field_type_dropdown = gr.Dropdown(
-                                choices=["string", "array", "object"],
-                                value="string",
-                                label="Тип данных",
-                            )
-                        with gr.Column():
-                            field_description = gr.Textbox(
-                                label="Описание",
-                                lines=4,
+                    with gr.Group(elem_classes=["input-group"]):
+                        with gr.Row():
+                            with gr.Column():
+                                field_name_input = gr.Textbox(
+                                    label="Имя поля (field name)",
+                                    placeholder="например: manufacturer",
+                                    info="Уникальный идентификатор поля (латиница, без пробелов)",
+                                )
+                                field_display_name = gr.Textbox(
+                                    label="Отображаемое имя",
+                                    placeholder="например: Производитель",
+                                )
+                                field_type_dropdown = gr.Dropdown(
+                                    choices=["string", "array", "object"],
+                                    value="string",
+                                    label="Тип данных",
+                                    info="string — текст, array — список, object — структура",
+                                )
+                            with gr.Column():
+                                field_description = gr.Textbox(
+                                    label="Описание",
+                                    lines=5,
+                                    placeholder="Подробное описание поля для LLM...",
+                                )
+
+                        with gr.Row():
+                            with gr.Column():
+                                field_hints = gr.Textbox(
+                                    label="💡 Подсказки для извлечения",
+                                    lines=4,
+                                    placeholder="По одной подсказке на строку...\nНапример:\n- Ищи в начале названия\n- Проверь официальный сайт",
+                                )
+                            with gr.Column():
+                                field_examples = gr.Textbox(
+                                    label="📚 Примеры",
+                                    lines=4,
+                                    placeholder="Input: iPhone 15 Pro Max\nOutput: Apple\n\nInput: Galaxy S24 Ultra\nOutput: Samsung",
+                                )
+
+                        with gr.Row():
+                            load_field_btn = gr.Button("📥 Загрузить поле", variant="secondary")
+                            save_field_btn = gr.Button(
+                                "💾 Сохранить поле",
+                                variant="primary",
+                                elem_classes=["primary-btn"],
                             )
 
-                    with gr.Row():
-                        with gr.Column():
-                            field_hints = gr.Textbox(
-                                label="Подсказки для извлечения (по одной на строку)",
-                                lines=4,
-                            )
-                        with gr.Column():
-                            field_examples = gr.Textbox(
-                                label="Примеры (Input: ... / Output: ...)",
-                                lines=4,
-                            )
-
-                    with gr.Row():
-                        load_field_btn = gr.Button("Загрузить поле")
-                        save_field_btn = gr.Button("Сохранить поле", variant="primary")
-                        field_status = gr.Textbox(label="Статус", interactive=False)
+                        field_status = gr.Textbox(
+                            label="Статус",
+                            interactive=False,
+                            elem_id="field-status",
+                        )
 
                     def load_field_from_table(evt: gr.SelectData):
                         if evt.index and len(evt.index) >= 1:
@@ -622,41 +1200,64 @@ class EnricherWebUI:
                 # ============================================
                 # Tab 3: Prompt Editor
                 # ============================================
-                with gr.TabItem("Редактор промптов"):
-                    with gr.Row():
-                        template_type_radio = gr.Radio(
-                            choices=["system", "user"],
-                            value="system",
-                            label="Тип шаблона",
+                with gr.TabItem("📝 Редактор промптов", id="prompts-tab"):
+                    gr.Markdown("### 🎨 Шаблоны промптов", elem_classes=["section-header"])
+                    gr.Markdown(
+                        "Редактируйте Jinja2-шаблоны для системных и пользовательских промптов",
+                        elem_classes=["hint-text"],
+                    )
+
+                    with gr.Group(elem_classes=["input-group"]):
+                        with gr.Row():
+                            template_type_radio = gr.Radio(
+                                choices=["system", "user"],
+                                value="system",
+                                label="Тип шаблона",
+                                info="system — инструкции для LLM, user — запрос на обогащение",
+                            )
+                            template_dropdown = gr.Dropdown(
+                                choices=self.prompt_engine.list_system_templates(),
+                                value="default",
+                                label="Шаблон",
+                                scale=2,
+                            )
+
+                        template_editor = gr.Code(
+                            label="📄 Шаблон (Jinja2)",
+                            language="jinja2",
+                            lines=20,
+                            elem_classes=["code-editor"],
                         )
-                        template_dropdown = gr.Dropdown(
-                            choices=self.prompt_engine.list_system_templates(),
-                            value="default",
-                            label="Шаблон",
+
+                        template_description = gr.Textbox(
+                            label="Описание шаблона",
+                            lines=1,
+                            placeholder="Краткое описание назначения шаблона...",
                         )
 
-                    template_editor = gr.Code(
-                        label="Шаблон (Jinja2)",
-                        language="jinja2",
-                        lines=20,
-                    )
+                        with gr.Row():
+                            load_template_btn = gr.Button("📥 Загрузить", variant="secondary")
+                            preview_template_btn = gr.Button("👁️ Preview", variant="secondary")
+                            save_template_btn = gr.Button(
+                                "💾 Сохранить",
+                                variant="primary",
+                                elem_classes=["primary-btn"],
+                            )
 
-                    template_description = gr.Textbox(
-                        label="Описание шаблона",
-                        lines=1,
-                    )
+                        template_status = gr.Textbox(
+                            label="Статус",
+                            interactive=False,
+                            elem_id="template-status",
+                        )
 
-                    with gr.Row():
-                        load_template_btn = gr.Button("Загрузить")
-                        preview_template_btn = gr.Button("Preview")
-                        save_template_btn = gr.Button("Сохранить", variant="primary")
-                        template_status = gr.Textbox(label="Статус", interactive=False)
+                    gr.Markdown("### 👁️ Предпросмотр", elem_classes=["section-header"])
 
-                    template_preview = gr.Textbox(
-                        label="Preview результат",
-                        lines=15,
-                        interactive=False,
-                    )
+                    with gr.Group(elem_classes=["output-group"]):
+                        template_preview = gr.Textbox(
+                            label="Результат рендеринга с тестовыми данными",
+                            lines=15,
+                            interactive=False,
+                        )
 
                     def update_template_choices(template_type):
                         if template_type == "system":
@@ -697,93 +1298,147 @@ class EnricherWebUI:
                 # ============================================
                 # Tab 4: Profiles
                 # ============================================
-                with gr.TabItem("Профили"):
-                    with gr.Row():
-                        profiles_dropdown = gr.Dropdown(
-                            choices=self.config_manager.list_profiles(),
-                            value="default",
-                            label="Профиль",
-                        )
-                        refresh_profiles_btn = gr.Button("Обновить", scale=0)
+                with gr.TabItem("👤 Профили", id="profiles-tab"):
+                    gr.Markdown("### 📂 Управление профилями", elem_classes=["section-header"])
 
-                    with gr.Row():
-                        with gr.Column():
-                            gr.Markdown("### Основные настройки")
-                            profile_name_input = gr.Textbox(label="Имя профиля")
-                            profile_description = gr.Textbox(label="Описание", lines=2)
+                    with gr.Group(elem_classes=["input-group"]):
+                        with gr.Row():
+                            profiles_dropdown = gr.Dropdown(
+                                choices=self.config_manager.list_profiles(),
+                                value="default",
+                                label="Выбор профиля",
+                                scale=4,
+                            )
+                            refresh_profiles_btn = gr.Button(
+                                "🔄 Обновить",
+                                scale=1,
+                                variant="secondary",
+                            )
 
-                            gr.Markdown("### Промпты")
+                    with gr.Row(equal_height=False):
+                        with gr.Column(elem_classes=["profile-card"]):
+                            gr.Markdown("### ⚙️ Основные настройки", elem_classes=["section-header"])
+                            profile_name_input = gr.Textbox(
+                                label="Имя профиля",
+                                placeholder="например: production",
+                            )
+                            profile_description = gr.Textbox(
+                                label="Описание",
+                                lines=2,
+                                placeholder="Описание назначения профиля...",
+                            )
+
+                            gr.Markdown("### 📝 Промпты", elem_classes=["section-header"])
                             profile_system_prompt = gr.Dropdown(
                                 choices=self.prompt_engine.list_system_templates(),
                                 label="Системный промпт",
+                                info="Шаблон инструкций для LLM",
                             )
                             profile_user_prompt = gr.Dropdown(
                                 choices=self.prompt_engine.list_user_templates(),
                                 label="Пользовательский промпт",
+                                info="Шаблон запроса на обогащение",
                             )
 
-                        with gr.Column():
-                            gr.Markdown("### LLM параметры")
+                        with gr.Column(elem_classes=["profile-card"]):
+                            gr.Markdown("### 🤖 LLM параметры", elem_classes=["section-header"])
                             profile_temperature = gr.Slider(
                                 minimum=0,
                                 maximum=1,
                                 step=0.1,
                                 value=0.3,
                                 label="Temperature",
+                                info="0 — детерминированный, 1 — креативный",
                             )
                             profile_max_tokens = gr.Number(
                                 value=4000,
                                 label="Max Tokens",
+                                info="Максимальная длина ответа",
                             )
 
-                            gr.Markdown("### Кэширование")
+                            gr.Markdown("### 💾 Кэширование", elem_classes=["section-header"])
                             profile_cache_enabled = gr.Checkbox(
                                 value=True,
-                                label="Кэширование включено",
+                                label="✅ Кэширование включено",
                             )
                             profile_cache_ttl = gr.Number(
                                 value=3600,
                                 label="TTL (секунды)",
+                                info="Время жизни кэша",
                             )
 
-                            gr.Markdown("### Веб-поиск")
+                            gr.Markdown("### 🔍 Веб-поиск", elem_classes=["section-header"])
                             profile_web_search = gr.Checkbox(
                                 value=True,
-                                label="Веб-поиск включен",
+                                label="✅ Веб-поиск включен",
                             )
 
-                    gr.Markdown("### Поля")
-                    profile_fields = gr.CheckboxGroup(
-                        choices=self._get_field_choices(),
-                        value=self._get_default_fields(),
-                        label="Включенные поля",
+                    gr.Markdown("### 🎯 Поля для извлечения", elem_classes=["section-header"])
+                    with gr.Group(elem_classes=["input-group"]):
+                        profile_fields = gr.CheckboxGroup(
+                            choices=self._get_field_choices(),
+                            value=self._get_default_fields(),
+                            label="Включенные поля",
+                        )
+
+                    with gr.Row():
+                        load_profile_btn = gr.Button("📥 Загрузить профиль", variant="secondary")
+                        save_profile_btn = gr.Button(
+                            "💾 Сохранить профиль",
+                            variant="primary",
+                            elem_classes=["primary-btn"],
+                        )
+
+                    profile_status = gr.Textbox(
+                        label="Статус",
+                        interactive=False,
+                        elem_id="profile-status",
                     )
 
-                    with gr.Row():
-                        load_profile_btn = gr.Button("Загрузить профиль")
-                        save_profile_btn = gr.Button("Сохранить профиль", variant="primary")
-                        profile_status = gr.Textbox(label="Статус", interactive=False)
+                    gr.HTML('<div class="section-divider"></div>')
 
-                    gr.Markdown("---")
-                    gr.Markdown("### Создание нового профиля")
-                    with gr.Row():
-                        new_profile_name = gr.Textbox(label="Имя нового профиля")
-                        base_profile_dropdown = gr.Dropdown(
-                            choices=self.config_manager.list_profiles(),
-                            value="default",
-                            label="На основе профиля",
+                    gr.Markdown("### ➕ Создание нового профиля", elem_classes=["section-header"])
+                    with gr.Group(elem_classes=["input-group"]):
+                        with gr.Row():
+                            new_profile_name = gr.Textbox(
+                                label="Имя нового профиля",
+                                placeholder="например: ecommerce",
+                                scale=2,
+                            )
+                            base_profile_dropdown = gr.Dropdown(
+                                choices=self.config_manager.list_profiles(),
+                                value="default",
+                                label="На основе профиля",
+                                scale=2,
+                            )
+                            create_profile_btn = gr.Button(
+                                "➕ Создать",
+                                variant="secondary",
+                                scale=1,
+                            )
+                        create_status = gr.Textbox(
+                            label="Статус",
+                            interactive=False,
                         )
-                        create_profile_btn = gr.Button("Создать", variant="secondary")
-                        create_status = gr.Textbox(label="Статус", interactive=False)
 
-                    gr.Markdown("### Удаление профиля")
-                    with gr.Row():
-                        delete_profile_dropdown = gr.Dropdown(
-                            choices=[p for p in self.config_manager.list_profiles() if p != "default"],
-                            label="Профиль для удаления",
+                    gr.Markdown("### 🗑️ Удаление профиля", elem_classes=["section-header"])
+                    with gr.Group(elem_classes=["input-group"]):
+                        with gr.Row():
+                            delete_profile_dropdown = gr.Dropdown(
+                                choices=[p for p in self.config_manager.list_profiles() if p != "default"],
+                                label="Профиль для удаления",
+                                info="Профиль 'default' нельзя удалить",
+                                scale=3,
+                            )
+                            delete_profile_btn = gr.Button(
+                                "🗑️ Удалить",
+                                variant="stop",
+                                scale=1,
+                            )
+                        delete_status = gr.Textbox(
+                            label="Статус",
+                            interactive=False,
                         )
-                        delete_profile_btn = gr.Button("Удалить", variant="stop")
-                        delete_status = gr.Textbox(label="Статус", interactive=False)
 
                     def load_profile_settings(profile_name):
                         settings = self._get_profile_settings(profile_name)
