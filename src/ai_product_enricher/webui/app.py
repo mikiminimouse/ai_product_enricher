@@ -365,9 +365,9 @@ input:focus, textarea:focus {
     font-style: italic;
 }
 
-/* Цвет текста в полях ввода - тёмный для читаемости */
+/* Цвет текста в полях ввода - светлый для читаемости на тёмном фоне */
 input, textarea, .svelte-1hguek3 {
-    color: #1E293B !important;
+    color: #E2E8F0 !important;
 }
 
 input::placeholder, textarea::placeholder {
@@ -691,12 +691,12 @@ class EnricherWebUI:
 
             metadata = {
                 "profile_used": profile_name,
-                "model_used": getattr(result, "model_used", "unknown"),
-                "llm_provider": getattr(result, "llm_provider", "unknown"),
-                "tokens_used": getattr(result, "tokens_used", 0),
-                "processing_time_ms": int((time.time() - start_time) * 1000),
-                "web_search_used": getattr(result, "web_search_used", False),
-                "cached": getattr(result, "cached", False),
+                "model_used": result.metadata.model_used,
+                "llm_provider": result.metadata.llm_provider,
+                "tokens_used": result.metadata.tokens_used,
+                "processing_time_ms": result.metadata.processing_time_ms,
+                "web_search_used": result.metadata.web_search_used,
+                "cached": result.metadata.cached,
             }
 
             return (
@@ -746,11 +746,22 @@ class EnricherWebUI:
         if not field_def:
             return "", "", "", "", "", ""
 
-        hints = "\n".join(field_def.extraction_hints)
+        # Конвертируем hints в строки (могут быть словари)
+        hints_list = []
+        for hint in field_def.extraction_hints:
+            if isinstance(hint, dict):
+                hints_list.append(json.dumps(hint, ensure_ascii=False))
+            else:
+                hints_list.append(str(hint))
+        hints = "\n".join(hints_list)
+
+        # Формируем примеры
         examples = ""
         for ex in field_def.examples:
+            # Конвертируем input в строку если это словарь
+            input_str = json.dumps(ex.input, ensure_ascii=False) if isinstance(ex.input, (dict, list)) else str(ex.input)
             output_str = json.dumps(ex.output, ensure_ascii=False) if isinstance(ex.output, (dict, list)) else str(ex.output)
-            examples += f"Input: {ex.input}\nOutput: {output_str}\n\n"
+            examples += f"Input: {input_str}\nOutput: {output_str}\n\n"
 
         return (
             field_def.name,
@@ -1101,6 +1112,19 @@ class EnricherWebUI:
                     gr.Markdown("### ✏️ Редактор поля", elem_classes=["section-header"])
 
                     with gr.Group(elem_classes=["input-group"]):
+                        # Dropdown для выбора поля
+                        with gr.Row():
+                            field_selector = gr.Dropdown(
+                                choices=self._get_available_fields(),
+                                label="Выберите поле для редактирования",
+                                scale=4,
+                            )
+                            load_selected_field_btn = gr.Button(
+                                "📥 Загрузить",
+                                scale=1,
+                                variant="secondary",
+                            )
+
                         with gr.Row():
                             with gr.Column():
                                 field_name_input = gr.Textbox(
@@ -1140,7 +1164,6 @@ class EnricherWebUI:
                                 )
 
                         with gr.Row():
-                            load_field_btn = gr.Button("📥 Загрузить поле", variant="secondary")
                             save_field_btn = gr.Button(
                                 "💾 Сохранить поле",
                                 variant="primary",
@@ -1154,16 +1177,55 @@ class EnricherWebUI:
                         )
 
                     def load_field_from_table(evt: gr.SelectData):
-                        if evt.index and len(evt.index) >= 1:
-                            row_idx = evt.index[0]
-                            fields_data = self._get_fields_dataframe()
-                            if row_idx < len(fields_data):
-                                field_name = fields_data[row_idx][0]
-                                return self._get_field_details(field_name)
+                        # Отладка: выводим все атрибуты события
+                        print(f"DEBUG select event: index={evt.index}, value={evt.value}, row_value={evt.row_value}")
+
+                        # В Gradio 6.x row_value содержит данные всей строки
+                        if evt.row_value and len(evt.row_value) > 0:
+                            field_name = evt.row_value[0]  # Первый столбец - имя поля
+                            print(f"DEBUG: Loading field '{field_name}'")
+                            result = self._get_field_details(field_name)
+                            print(f"DEBUG: Field details result: {result}")
+                            return result
+                        print("DEBUG: row_value is empty or None")
                         return "", "", "", "", "", ""
 
                     fields_table.select(
                         fn=load_field_from_table,
+                        outputs=[
+                            field_name_input,
+                            field_display_name,
+                            field_type_dropdown,
+                            field_description,
+                            field_hints,
+                            field_examples,
+                        ],
+                    )
+
+                    # Обработчик для Dropdown выбора поля
+                    def load_field_from_dropdown(field_name):
+                        if field_name:
+                            return self._get_field_details(field_name)
+                        return "", "", "", "", "", ""
+
+                    # Загрузка при клике на кнопку
+                    load_selected_field_btn.click(
+                        fn=load_field_from_dropdown,
+                        inputs=[field_selector],
+                        outputs=[
+                            field_name_input,
+                            field_display_name,
+                            field_type_dropdown,
+                            field_description,
+                            field_hints,
+                            field_examples,
+                        ],
+                    )
+
+                    # Автозагрузка при выборе поля в dropdown
+                    field_selector.change(
+                        fn=load_field_from_dropdown,
+                        inputs=[field_selector],
                         outputs=[
                             field_name_input,
                             field_display_name,

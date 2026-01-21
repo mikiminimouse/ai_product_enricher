@@ -31,10 +31,10 @@ class Settings(BaseSettings):
         description="Zhipu AI model to use",
     )
     zhipuai_timeout: int = Field(
-        default=60,
+        default=120,
         ge=10,
         le=300,
-        description="API request timeout in seconds",
+        description="API request timeout in seconds (GLM-4.7 needs ~50s for reasoning)",
     )
     zhipuai_max_retries: int = Field(
         default=3,

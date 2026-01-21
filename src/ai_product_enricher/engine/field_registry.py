@@ -112,7 +112,8 @@ class FieldRegistry:
         """
         if config_dir is None:
             # Try to find config dir relative to project root
-            project_root = Path(__file__).parent.parent.parent.parent.parent
+            # Path: field_registry.py -> engine -> ai_product_enricher -> src -> ai_product_enricher
+            project_root = Path(__file__).parent.parent.parent.parent
             config_dir = project_root / "config"
 
         self.config_dir = Path(config_dir)

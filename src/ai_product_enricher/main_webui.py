@@ -86,11 +86,17 @@ Examples:
         print("Mode: Demo (without enricher service)")
     print("\n")
 
+    # Get custom theme and css from app attributes (Gradio 6.0+ compatibility)
+    theme = getattr(app, "_custom_theme", None)
+    css = getattr(app, "_custom_css", None)
+
     app.launch(
         server_name="0.0.0.0",
         server_port=args.port,
         share=args.share,
         show_error=True,
+        theme=theme,
+        css=css,
     )
 
 
