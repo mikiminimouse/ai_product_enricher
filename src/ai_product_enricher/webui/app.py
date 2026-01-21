@@ -365,11 +365,6 @@ input:focus, textarea:focus {
     font-style: italic;
 }
 
-/* Цвет текста в полях ввода - светлый для читаемости на тёмном фоне */
-input, textarea, .svelte-1hguek3 {
-    color: #E2E8F0 !important;
-}
-
 input::placeholder, textarea::placeholder {
     color: #94A3B8 !important;
 }
@@ -517,6 +512,14 @@ ul[role="listbox"] li[aria-selected="true"],
 .secondary-wrap.svelte-1xfsv4t:focus-within {
     border-color: #8B5CF6 !important;
     box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important;
+}
+
+/* ФИНАЛЬНОЕ ПРАВИЛО: чёрный текст для textarea */
+body .gradio-container textarea,
+body .gradio-container textarea.svelte-1hguek3,
+html body .gradio-container .contain textarea {
+    color: #1E293B !important;
+    -webkit-text-fill-color: #1E293B !important;
 }
 """
 

@@ -1,0 +1,26 @@
+name: custom
+description: 'Custom fields: custom'
+version: '1.0'
+fields:
+  manufacturer:
+    display_name: Производитель
+    description: 'Компания-производитель, которая физически изготавливает товар.
+
+      Это фабрика или завод, где товар был произведен, а не бренд.
+
+      Например: Foxconn производит iPhone для Apple.
+
+      '
+    type: string
+    required: false
+    extraction_hints:
+    - Ищи информацию о заводе-изготовителе
+    - Производитель может отличаться от бренда
+    - Часто указывается как "Made by" или "Manufactured by"
+    examples:
+    - input: Apple iPhone 15 Pro Max 256GB
+      output: Foxconn
+    - input: Samsung Galaxy S24 Ultra
+      output: Samsung Electronics
+    - input: Яндекс Станция Макс
+      output: Яндекс
