@@ -1,6 +1,26 @@
 # AI Product Enricher
 
-Production-ready сервис для обогащения продуктовых данных с мульти-LLM архитектурой.
+> Production-ready сервис для обогащения продуктовых данных с мульти-LLM архитектурой
+
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)]
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)]
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)]
+
+## Обзор
+
+Сервис автоматически обогащает продуктовые данные, используя несколько LLM-провайдеров:
+- **Z.ai (GLM-4.7)** — для зарубежных производителей (CN, US, KR и др.)
+- **Cloud.ru (GigaChat)** — для российских производителей (RU)
+
+Автоматическая маршрутизация по полю `country_origin`.
+
+### Ключевая возможность: Manufacturer & Trademark Extraction
+
+Сервис автоматически определяет из названия товара:
+- **Производитель (manufacturer)** — компания, которая физически производит товар
+- **Торговая марка (trademark)** — бренд, под которым продаётся товар
+
+Пример: для "iPhone 15 Pro" → manufacturer: "Foxconn", trademark: "Apple"
 
 ## Архитектура
 
@@ -27,15 +47,18 @@ Production-ready сервис для обогащения продуктовых
 └───────────────────────┘                           └───────────────────────┘
 ```
 
-**Маршрутизация LLM:**
+### LLM Маршрутизация
+
 | country_origin | LLM Provider | Модель |
 |----------------|--------------|--------|
 | `RU` / `RUS` | Cloud.ru | GigaChat3-10B-A1.8B |
 | Любой другой / null | Z.ai | GLM-4.7 |
 
+При недоступности Cloud.ru — автоматический fallback на Z.ai.
+
 ## Внешний API (для команды)
 
-**Base URL:** `http://128.199.126.60:8000`
+**Base URL:** `http://128.199.126.60:8000` (или `http://localhost:8000` для локальной разработки)
 
 | Endpoint | Описание |
 |----------|----------|
@@ -51,10 +74,11 @@ Production-ready сервис для обогащения продуктовых
 - **Автоопределение manufacturer/trademark** из названия товара
 - **Web Search** — актуальная информация о товарах (Z.ai)
 - **Пакетная обработка** нескольких продуктов
-- **Встроенное кэширование** результатов
+- **Встроенное кэширование** результатов (TTL 1 час)
 - **RESTful API** с OpenAPI документацией
-- **Структурированное логирование**
+- **Структурированное логирование** (structlog)
 - **Docker-ready**
+- **Retry logic** с tenacity
 
 ## Быстрый старт
 
@@ -96,11 +120,22 @@ LOG_LEVEL=INFO
 ### Запуск
 
 ```bash
-# Development
+# Development (для отладки, в текущем терминале)
 uvicorn src.ai_product_enricher.main:app --reload
 
-# Production
-uvicorn src.ai_product_enricher.main:app --host 0.0.0.0 --port 8000
+# Production (демон в фоне, не падает при закрытии терминала)
+# Управление через systemd:
+sudo systemctl start ai-product-enricher    # запуск
+sudo systemctl stop ai-product-enricher     # остановка
+sudo systemctl restart ai-product-enricher  # перезапуск
+sudo systemctl status ai-product-enricher   # статус
+
+# Или через удобный скрипт:
+./manage_server.sh start    # запуск
+./manage_server.sh stop     # остановка
+./manage_server.sh restart  # перезапуск
+./manage_server.sh status   # статус
+./manage_server.sh logs     # логи
 ```
 
 ## API Примеры
@@ -108,22 +143,32 @@ uvicorn src.ai_product_enricher.main:app --host 0.0.0.0 --port 8000
 ### Health Check
 
 ```bash
-curl http://128.199.126.60:8000/api/v1/health
+curl http://localhost:8000/api/v1/health
 ```
 
 Ответ:
 ```json
 {
   "status": "healthy",
+  "version": "1.0.0",
   "zhipu_api": "connected",
-  "cloudru_api": "connected"
+  "cloudru_api": "connected",
+  "uptime_seconds": 85568,
+  "cache": {
+    "size": 0,
+    "max_size": 1000,
+    "ttl_seconds": 3600,
+    "hits": 0,
+    "misses": 0,
+    "hit_rate_percent": 0.0
+  }
 }
 ```
 
 ### Российский товар → Cloud.ru
 
 ```bash
-curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
+curl -X POST http://localhost:8000/api/v1/products/enrich \
   -H "Content-Type: application/json" \
   -d '{
     "product": {
@@ -138,7 +183,11 @@ curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
 {
   "metadata": {
     "model_used": "ai-sage/GigaChat3-10B-A1.8B",
-    "llm_provider": "cloudru"
+    "llm_provider": "cloudru",
+    "tokens_used": 2134,
+    "processing_time_ms": 940,
+    "web_search_used": false,
+    "cached": false
   }
 }
 ```
@@ -146,7 +195,7 @@ curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
 ### Зарубежный товар → Z.ai
 
 ```bash
-curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
+curl -X POST http://localhost:8000/api/v1/products/enrich \
   -H "Content-Type: application/json" \
   -d '{
     "product": {
@@ -162,7 +211,10 @@ curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
   "metadata": {
     "model_used": "GLM-4.7",
     "llm_provider": "zhipuai",
-    "web_search_used": true
+    "tokens_used": 2360,
+    "processing_time_ms": 34058,
+    "web_search_used": true,
+    "cached": false
   }
 }
 ```
@@ -170,7 +222,7 @@ curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
 ### Пакетная обработка
 
 ```bash
-curl -X POST http://128.199.126.60:8000/api/v1/products/enrich/batch \
+curl -X POST http://localhost:8000/api/v1/products/enrich/batch \
   -H "Content-Type: application/json" \
   -d '{
     "products": [
@@ -180,12 +232,14 @@ curl -X POST http://128.199.126.60:8000/api/v1/products/enrich/batch \
   }'
 ```
 
-В batch-ответе каждый товар маршрутизируется к соответствующему LLM.
+В batch-ответе каждый товар автоматически маршрутизируется к соответствующему LLM:
+- `1С:Предприятие` (RU) → Cloud.ru
+- `Microsoft Office` (US) → Z.ai
 
 ### Полный запрос с опциями
 
 ```bash
-curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
+curl -X POST http://localhost:8000/api/v1/products/enrich \
   -H "Content-Type: application/json" \
   -d '{
     "product": {
@@ -201,18 +255,40 @@ curl -X POST http://128.199.126.60:8000/api/v1/products/enrich \
   }'
 ```
 
-## Поля обогащения
+## API Формат данных
+
+### Входные данные (ProductInput)
+
+| Поле | Тип | Обязательный | Описание |
+|------|-----|--------------|----------|
+| `name` | str | ✓ | Наименование товара из прайс-листа/госзакупок |
+| `description` | str \| None | | Дополнительное описание |
+| `country_origin` | str \| None | | Страна происхождения (ISO 3166-1 alpha-2/3) |
+
+### Выходные данные (EnrichedProduct)
 
 | Поле | Описание |
 |------|----------|
-| `manufacturer` | Компания-производитель (физически производит товар) |
+| `manufacturer` | Компания-производитель (физически производит) |
 | `trademark` | Торговая марка/бренд |
 | `category` | Категория товара |
 | `model_name` | Модель/артикул |
-| `description` | Расширенное описание |
-| `features` | Ключевые характеристики |
-| `specifications` | Технические характеристики |
-| `seo_keywords` | SEO ключевые слова |
+| `description` | Обогащённое описание |
+| `features` | Ключевые характеристики (список) |
+| `specifications` | Технические характеристики (словарь) |
+| `seo_keywords` | SEO ключевые слова (список) |
+
+### Metadata
+
+| Поле | Описание |
+|------|----------|
+| `model_used` | Использованная модель |
+| `llm_provider` | `zhipuai` или `cloudru` |
+| `tokens_used` | Количество токенов |
+| `processing_time_ms` | Время обработки в мс |
+| `web_search_used` | Использовался ли web search |
+| `cached` | Результат из кэша |
+| `timestamp` | Время обработки (ISO 8601) |
 
 ## Конфигурация
 
@@ -260,6 +336,23 @@ docker run -p 8000:8000 \
 docker-compose up
 ```
 
+### Docker Compose пример
+
+```yaml
+version: '3.8'
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
+      - CLOUDRU_API_KEY=${CLOUDRU_API_KEY}
+      - APP_ENV=production
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+```
+
 ## Тестирование
 
 ```bash
@@ -274,7 +367,17 @@ pytest tests/integration -v
 
 # С coverage
 pytest --cov=src/ai_product_enricher --cov-report=html
+
+# С покрытием и отчётом
+pytest --cov=src/ai_product_enricher --cov-report=term-missing
 ```
+
+### Тестовые данные
+
+Fixtures находятся в `tests/conftest.py`:
+- `mock_product_input` — тестовый ввод
+- `mock_enriched_product` — тестовый вывод
+- `mock_zhipu_response` — мок Z.ai API
 
 ## Структура проекта
 
@@ -282,24 +385,120 @@ pytest --cov=src/ai_product_enricher --cov-report=html
 ai_product_enricher/
 ├── src/ai_product_enricher/
 │   ├── api/              # API endpoints
-│   │   └── v1/           # API версия 1
+│   │   ├── v1/           # API версия 1
+│   │   │   └── products.py   # Эндпоинты продуктов
+│   │   ├── dependencies.py    # Зависимости
+│   │   └── router.py          # Роутер
 │   ├── core/             # Config, logging, exceptions
+│   │   ├── config.py          # Конфигурация
+│   │   ├── logging.py         # Логирование
+│   │   └── exceptions.py      # Исключения
 │   ├── models/           # Pydantic models
+│   │   ├── enrichment.py      # Модели обогащения
+│   │   └── schemas.py         # API схемы
 │   ├── services/         # Business logic
-│   │   ├── enricher.py       # Маршрутизация LLM
-│   │   ├── zhipu_client.py   # Z.ai клиент
-│   │   ├── cloudru_client.py # Cloud.ru клиент
-│   │   └── cache.py          # Кэш сервис
+│   │   ├── enricher.py        # Маршрутизация LLM
+│   │   ├── zhipu_client.py    # Z.ai клиент
+│   │   ├── cloudru_client.py  # Cloud.ru клиент
+│   │   └── cache.py           # Кэш сервис
 │   └── main.py           # FastAPI app
 ├── tests/
-│   ├── unit/
-│   └── integration/
-├── docs/
+│   ├── unit/            # Unit тесты
+│   ├── integration/     # Integration тесты
+│   └── conftest.py      # Fixtures
+├── docs/                # Документация
 ├── Dockerfile
 ├── docker-compose.yml
-└── pyproject.toml
+├── pyproject.toml
+└── README.md
+```
+
+## Кэширование
+
+Кэш ключ основывается на:
+- product name (lowercase, case-insensitive)
+- language
+- fields
+- web_search flag
+
+**Примечание:** manufacturer/trademark не участвуют в ключе кэша, т.к. извлекаются из name.
+
+TTL по умолчанию: 3600 секунд (1 час)
+Максимальный размер: 1000 записей
+
+## Development
+
+```bash
+# Type checking
+mypy src/
+
+# Linting
+ruff check src/
+
+# Format
+ruff format src/
+
+# Запуск с автозагрузкой
+uvicorn src.ai_product_enricher.main:app --reload --log-level debug
+```
+
+## AI Co-Authorship
+
+Этот проект разработан при содействии AI:
+
+| AI | Роль |
+|----|------|
+| **Claude Opus 4.5** (Anthropic) | Архитектура, код, документация, тесты |
+| **Zhipu AI GLM-4.7** | Обогащение данных зарубежных товаров |
+| **Cloud.ru GigaChat** | Обогащение данных российских товаров |
+
+### Соавторство коммитов
+
+Все коммиты содержат соавторство:
+```
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+### Используемые технологии
+
+- **LLM Providers**: Zhipu AI, Cloud.ru
+- **API Framework**: FastAPI
+- **Data Validation**: Pydantic v2
+- **Testing**: pytest + pytest-asyncio
+- **Logging**: structlog
+- **Retry**: tenacity
+- **Container**: Docker
+
+## Troubleshooting
+
+### Cloud.ru недоступен
+
+Если Cloud.ru недоступен, сервис автоматически fallback'ится на Z.ai:
+```python
+# В логах:
+"Failed to enrich with Cloud.ru, falling back to Zhipu AI"
+```
+
+### Timeout ошибки
+
+Увеличьте `CLOUDRU_TIMEOUT` в `.env`:
+```bash
+CLOUDRU_TIMEOUT=120  # 2 минуты
+```
+
+### Кэш не работает
+
+Проверьте конфигурацию:
+```bash
+LOG_LEVEL=DEBUG  # Включите DEBUG для логов кэша
 ```
 
 ## Лицензия
 
-MIT
+MIT License - см. файл LICENSE
+
+---
+
+**Версия:** 1.0.0
+**Статус:** Production-ready
+**Tech Stack:** Python 3.11+, FastAPI, Pydantic v2, OpenAI SDK

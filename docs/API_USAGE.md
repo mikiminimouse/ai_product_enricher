@@ -264,11 +264,14 @@ print(f"Провайдер: {result_cn['data']['metadata']['llm_provider']}")  #
 cd /root/ai_product_enricher
 source .venv/bin/activate
 
-# Запуск с внешним доступом
-python -c "import uvicorn; uvicorn.run('src.ai_product_enricher.main:app', host='0.0.0.0', port=8000)"
+# Development режим (только локально)
+uvicorn src.ai_product_enricher.main:app --reload
+
+# Production режим (доступен извне)
+python -m src.ai_product_enricher.main
 ```
 
 После запуска:
-- API: http://localhost:8000
-- Swagger: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+- API: http://localhost:8000 или http://128.199.126.60:8000 (извне)
+- Swagger: http://localhost:8000/docs или http://128.199.126.60:8000/docs
+- ReDoc: http://localhost:8000/redoc или http://128.199.126.60:8000/redoc

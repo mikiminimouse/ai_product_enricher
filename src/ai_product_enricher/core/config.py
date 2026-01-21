@@ -72,6 +72,10 @@ class Settings(BaseSettings):
         default=False,
         description="Enable debug mode",
     )
+    docs_enabled: bool = Field(
+        default=True,
+        description="Enable API documentation (Swagger/ReDoc)",
+    )
     app_host: str = Field(
         default="0.0.0.0",
         description="Application host",

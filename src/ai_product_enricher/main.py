@@ -43,9 +43,9 @@ app = FastAPI(
     title="AI Product Enricher",
     description="Production-ready service for enriching product data using Zhipu AI (GLM-4.7) API with web search support",
     version=__version__,
-    docs_url="/docs" if settings.app_debug or settings.is_development else None,
-    redoc_url="/redoc" if settings.app_debug or settings.is_development else None,
-    openapi_url="/openapi.json" if settings.app_debug or settings.is_development else None,
+    docs_url="/docs" if settings.docs_enabled else None,
+    redoc_url="/redoc" if settings.docs_enabled else None,
+    openapi_url="/openapi.json" if settings.docs_enabled else None,
     lifespan=lifespan,
 )
 

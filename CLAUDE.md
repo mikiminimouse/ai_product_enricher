@@ -87,8 +87,11 @@ country_origin != "RU" или null → Z.ai (GLM-4.7)
 # Install dependencies
 pip install -e ".[dev]"
 
-# Run development server
+# Run development server (только локально)
 uvicorn src.ai_product_enricher.main:app --reload
+
+# Run production server (доступен извне)
+python -m src.ai_product_enricher.main
 
 # Run tests
 pytest
