@@ -24,3 +24,23 @@ fields:
       output: Samsung Electronics
     - input: Яндекс Станция Макс
       output: Яндекс
+  trademark:
+    display_name: Торговая марка
+    description: 'Бренд или торговая марка, под которой продается товар.
+
+      Это название, которое потребитель видит на упаковке и в рекламе.
+
+      '
+    type: string
+    required: false
+    extraction_hints:
+    - Бренд обычно самое известное название в названии товара
+    - Часто стоит в начале названия товара
+    - Может отличаться от производителя
+    examples:
+    - input: Apple iPhone 15 Pro Max 256GB
+      output: Apple
+    - input: Xiaomi Redmi Note 13 Pro
+      output: Xiaomi
+    - input: Яндекс Станция Макс
+      output: Яндекс
